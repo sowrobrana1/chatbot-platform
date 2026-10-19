@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { generateBotReply, BotContext } from "@/lib/ai";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 
+export const dynamic = 'force-dynamic';
+
 /**
  * WhatsApp Cloud API webhook.
  * GET  -> verification
