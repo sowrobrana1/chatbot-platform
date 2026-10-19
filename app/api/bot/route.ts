@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateBotReply, BotContext } from "@/lib/ai";
 
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/bot
  * Body: { message: string, context: BotContext, history?: [...] }
