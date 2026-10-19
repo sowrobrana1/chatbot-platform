@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
+export const dynamic = 'force-dynamic';
+
 // TODO: Replace DEMO_USER_ID with real session auth (NextAuth).
 const DEMO_USER_ID = "demo-user";
 
