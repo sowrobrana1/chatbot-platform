@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { generateBotReply, BotContext } from "@/lib/ai";
 import { sendFacebookMessage, verifyFacebookSignature } from "@/lib/facebook";
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Facebook Messenger webhook.
  * GET  -> verification (Meta calls this when you configure the webhook)
