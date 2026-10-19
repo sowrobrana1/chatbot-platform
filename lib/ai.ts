@@ -1,0 +1,87 @@
+import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
+
+export type AiProvider = "anthropic" | "openai";
+
+export interface BotContext {
+  businessName: string;
+  products: { nameBn: string; nameEn: string; price: number; stock: number }[];
+  deliveryInsideDhaka: number;
+  deliveryOutsideDhaka: number;
+  codEnabled: boolean;
+  language: "bn" | "en";
+  tone: string;
+  systemPrompt: string;
+}
+
+function buildSystemPrompt(ctx: BotContext): string {
+  const productList =
+    ctx.products.length > 0
+      ? ctx.products
+          .map((p) => `- ${p.nameBn}${p.nameEn ? ` (${p.nameEn})` : ""}: ৳${p.price} (স্টক: ${p.stock})`)
+          .join("\n")
+      : "(কোনো প্রোডাক্ট যোগ করা হয়নি)";
+
+  const base =
+    ctx.language === "bn"
+      ? `তুমি "${ctx.businessName}"-এর AI সেলস এজেন্ট। বাংলায় বন্ধুসুলভ ভঙ্গিতে উত্তর দাও।\n\nপ্রোডাক্ট তালিকা:\n${productList}\n\nডেলিভারি চার্জ: ঢাকার ভিতরে ৳${ctx.deliveryInsideDhaka}, ঢাকার বাইরে ৳${ctx.deliveryOutsideDhaka}।\n${ctx.codEnabled ? "ক্যাশ অন ডেলিভারি চালু আছে।" : ""}\n\nনিয়ম: শুধু উপরের তালিকার প্রোডাক্ট সম্পর্কে বলো। দাম বানিয়ে বলো না। অর্ডার নিতে চাইলে নাম, ফোন, ঠিকানা চাও।`
+      : `You are the AI sales agent for "${ctx.businessName}". Reply in a friendly tone.\n\nProducts:\n${productList}\n\nDelivery: ৳${ctx.deliveryInsideDhaka} inside Dhaka, ৳${ctx.deliveryOutsideDhaka} outside.\n${ctx.codEnabled ? "Cash on delivery available." : ""}\n\nRules: only mention products from the list above. Never invent prices. To take an order, ask for name, phone, address.`;
+
+  return ctx.systemPrompt ? `${base}\n\nAdditional instructions:\n${ctx.systemPrompt}` : base;
+}
+
+/**
+ * Generate a bot reply using the configured AI provider.
+ * TODO: Add your ANTHROPIC_API_KEY or OPENAI_API_KEY in .env
+ */
+export async function generateBotReply(
+  userMessage: string,
+  ctx: BotContext,
+  history: { role: "user" | "assistant"; content: string }[] = []
+): Promise<string> {
+  const provider: AiProvider =
+    (process.env.AI_PROVIDER as AiProvider) ||
+    "anthropic";
+  const system = buildSystemPrompt(ctx);
+
+  try {
+    if (provider === "openai") {
+      if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY missing");
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const res = await openai.chat.completions.create({
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        messages: [
+          { role: "system", content: system },
+          ...history,
+          { role: "user", content: userMessage },
+        ],
+        max_tokens: 500,
+      });
+      return res.choices[0]?.message?.content?.trim() || fallbackReply(ctx);
+    }
+
+    // Default: Anthropic Claude
+    if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY missing");
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const res = await anthropic.messages.create({
+      model: process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20240620",
+      max_tokens: 500,
+      system,
+      messages: [...history, { role: "user", content: userMessage }],
+    });
+    const block = res.content[0];
+    if (block.type === "text") return block.text.trim();
+    return fallbackReply(ctx);
+  } catch (err) {
+    console.error("AI reply failed:", err);
+    return fallbackReply(ctx);
+  }
+}
+
+/** Used when no AI key is configured or the API fails. */
+export function fallbackReply(ctx: BotContext): string {
+  if (ctx.language === "bn") {
+    return "দুঃখিত, এই মুহূর্তে উত্তর দিতে পারছি না। শীঘ্রই আমাদের টিম যোগাযোগ করবে।";
+  }
+  return "Sorry, I can't reply right now. Our team will contact you soon.";
+}
