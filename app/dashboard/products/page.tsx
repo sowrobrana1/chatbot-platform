@@ -11,7 +11,7 @@ export default function ProductsPage() {
   const [form, setForm] = useState({ nameBn: "", nameEn: "", price: "", stock: "", sku: "" });
 
   const load = () => fetch("/api/products").then((r) => r.json()).then(setProducts);
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
