@@ -16,7 +16,7 @@ export default function OrdersPage() {
     fetch(`/api/orders${filter ? `?status=${filter}` : ""}`)
       .then((r) => r.json()).then(setOrders);
   };
-  useEffect(load, [filter]);
+  useEffect(() => { load(); }, [filter]);
 
   const setStatus = async (id: string, status: string) => {
     await fetch(`/api/orders/${id}`, {
