@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  createdAt DateTime @default(now())
+  settings  Settings?
+  products  Product[]
+  orders    Order[]
+}
+
+model Settings {
+  id            String  @id @default(cuid())
+  userId        String  @unique
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName  String  @default("")
+  businessNameEn String @default("")
+  phone         String  @default("")
+  address       String  @default("")
+  // AI config
+  aiProvider    String  @default("anthropic") // anthropic | openai | gemini
+  aiModel       String  @default("claude-3-5-sonnet-20240620")
+  systemPrompt  String  @default("") @db.Text
+  botLanguage   String  @default("bn") // bn | en
+  botTone       String  @default("friendly")
+  // Delivery
+  deliveryInsideDhaka  Int @default(60)
+  deliveryOutsideDhaka Int @default(120)
+  codEnabled    Boolean @default(true)
+  // Facebook
+  fbPageId      String  @default("")
+  fbPageToken   String  @default("") @db.Text
+  fbVerifyToken String  @default("")
+  fbConnected   Boolean @default(false)
+  // WhatsApp
+  waPhoneNumberId String @default("")
+  waAccessToken   String @default("") @db.Text
+  waVerifyToken   String @default("")
+  waConnected     Boolean @default(false)
+}
+
+model Product {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nameBn    String
+  nameEn    String   @default("")
+  price     Int
+  stock     Int      @default(0)
+  sku       String   @default("")
+  imageUrl  String   @default("")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orderItems OrderItem[]
+}
+
+model Order {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customerName String
+  customerPhone String
+  customerAddress String @db.Text
+  channel     String   @default("web") // web | facebook | whatsapp
+  status      String   @default("pending") // pending | confirmed | shipped | delivered | cancelled
+  subtotal    Int      @default(0)
+  deliveryCharge Int   @default(0)
+  total       Int      @default(0)
+  notes       String   @default("") @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  items       OrderItem[]
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int     @default(1)
+  price     Int
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  userId    String
+  channel   String   // facebook | whatsapp | web
+  senderId  String
+  senderName String  @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  messages  Message[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // user | bot
+  text           String       @db.Text
+  createdAt      DateTime     @default(now())
+}
