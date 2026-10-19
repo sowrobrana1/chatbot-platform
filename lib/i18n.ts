@@ -1,0 +1,58 @@
+export type Lang = "bn" | "en";
+
+export const t = {
+  bn: {
+    tagline: "বাংলাদেশের সেরা AI চ্যাটবট — Facebook ও WhatsApp-এর জন্য",
+    heroSub:
+      "আপনার Facebook Page ও WhatsApp-এ বাংলা AI চ্যাটবট বসান। অর্ডার নিন, প্রশ্নের উত্তর দিন, বিক্রি বাড়ান — সম্পূর্ণ অটোমেটিক, ২৪/৭।",
+    getStarted: "ফ্রি শুরু করুন",
+    liveDemo: "লাইভ ডেমো দেখুন",
+    features: "ফিচারসমূহ",
+    pricing: "প্রাইসিং",
+    faq: "সাধারণ প্রশ্ন",
+    contact: "যোগাযোগ",
+    dashboard: "ড্যাশবোর্ড",
+    products: "প্রোডাক্ট",
+    orders: "অর্ডার",
+    botStudio: "বট স্টুডিও",
+    analytics: "অ্যানালিটিক্স",
+    settings: "সেটিংস",
+    smartReplies: "স্মার্ট AI রিপ্লাই",
+    smartRepliesDesc: "Claude, GPT-4, Gemini — পছন্দের মডেল বেছে নিন। বাংলা বোঝে, প্রসঙ্গ ধরে উত্তর দেয়।",
+    multiInbox: "মাল্টি-প্ল্যাটফর্ম ইনবক্স",
+    multiInboxDesc: "Facebook, WhatsApp, Instagram — সব মেসেজ এক ড্যাশবোর্ডে।",
+    catalog: "প্রোডাক্ট ক্যাটালগ",
+    catalogDesc: "ছবি, দাম, স্টকসহ প্রোডাক্ট আপলোড করুন। বট নিজেই কাস্টমারকে দেখাবে।",
+    orderMgmt: "অর্ডার ম্যানেজমেন্ট",
+    orderMgmtDesc: "কনফার্ম থেকে ডেলিভারি — কুরিয়ার ট্র্যাকিংসহ।",
+    analyticsDesc: "মেসেজ, কনভার্সন, বিক্রি — সব ডেটা এক জায়গায়।",
+  },
+  en: {
+    tagline: "Bangladesh's Best AI Chatbot — for Facebook & WhatsApp",
+    heroSub:
+      "Set up a Bangla AI chatbot on your Facebook Page and WhatsApp. Take orders, answer questions, grow sales — fully automatic, 24/7.",
+    getStarted: "Get Started Free",
+    liveDemo: "See Live Demo",
+    features: "Features",
+    pricing: "Pricing",
+    faq: "FAQ",
+    contact: "Contact",
+    dashboard: "Dashboard",
+    products: "Products",
+    orders: "Orders",
+    botStudio: "Bot Studio",
+    analytics: "Analytics",
+    settings: "Settings",
+    smartReplies: "Smart AI Replies",
+    smartRepliesDesc: "Claude, GPT-4, Gemini — pick your model. Understands Bangla, replies with context.",
+    multiInbox: "Multi-Platform Inbox",
+    multiInboxDesc: "Facebook, WhatsApp, Instagram — all messages in one dashboard.",
+    catalog: "Product Catalog",
+    catalogDesc: "Upload products with photos, prices, stock. The bot shows them to customers.",
+    orderMgmt: "Order Management",
+    orderMgmtDesc: "From confirm to delivery — with courier tracking.",
+    analyticsDesc: "Messages, conversion, sales — all data in one place.",
+  },
+} as const;
+
+export type Dict = (typeof t)["bn"];
