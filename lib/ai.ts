@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 
-export type AiProvider = "anthropic" | "openai";
+export type AiProvider = "anthropic" | "openai" | "gemini";
 
 export interface BotContext {
   businessName: string;
@@ -32,7 +32,9 @@ function buildSystemPrompt(ctx: BotContext): string {
 
 /**
  * Generate a bot reply using the configured AI provider.
- * TODO: Add your ANTHROPIC_API_KEY or OPENAI_API_KEY in .env
+ * Set one of ANTHROPIC_API_KEY, OPENAI_API_KEY or GEMINI_API_KEY in the env.
+ * Gemini (Google AI Studio) has a free tier and is used automatically when
+ * GEMINI_API_KEY is set and AI_PROVIDER is not specified.
  */
 export async function generateBotReply(
   userMessage: string,
@@ -41,10 +43,28 @@ export async function generateBotReply(
 ): Promise<string> {
   const provider: AiProvider =
     (process.env.AI_PROVIDER as AiProvider) ||
-    "anthropic";
+    (process.env.GEMINI_API_KEY ? "gemini" : "anthropic");
   const system = buildSystemPrompt(ctx);
 
   try {
+    if (provider === "gemini") {
+      if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY missing");
+      const gemini = new OpenAI({
+        apiKey: process.env.GEMINI_API_KEY,
+        baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+      });
+      const res = await gemini.chat.completions.create({
+        model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+        messages: [
+          { role: "system", content: system },
+          ...history,
+          { role: "user", content: userMessage },
+        ],
+        max_tokens: 500,
+      });
+      return res.choices[0]?.message?.content?.trim() || fallbackReply(ctx);
+    }
+
     if (provider === "openai") {
       if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY missing");
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
