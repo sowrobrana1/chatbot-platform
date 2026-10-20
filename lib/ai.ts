@@ -41,16 +41,21 @@ export async function generateBotReply(
   ctx: BotContext,
   history: { role: "user" | "assistant"; content: string }[] = []
 ): Promise<string> {
+  const geminiKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GEMINI_KEY ||
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   const provider: AiProvider =
     (process.env.AI_PROVIDER as AiProvider) ||
-    (process.env.GEMINI_API_KEY ? "gemini" : "anthropic");
+    (geminiKey ? "gemini" : "anthropic");
   const system = buildSystemPrompt(ctx);
 
   try {
     if (provider === "gemini") {
-      if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY missing");
+      if (!geminiKey) throw new Error("GEMINI_API_KEY missing");
       const gemini = new OpenAI({
-        apiKey: process.env.GEMINI_API_KEY,
+        apiKey: geminiKey,
         baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
       });
       // Model chain: individual Gemini models periodically return 404/503 for
