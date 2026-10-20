@@ -374,13 +374,13 @@ export async function POST(req: NextRequest) {
         }
 
         // Recovery sweep: the bot confirmed an order in prose but forgot the
-        // marker (happens in follow-up turns). If this reply sounds like an
-        // order confirmation and the conversation contains a phone number,
-        // extract the order from the transcript and save it for real.
-        if (
-          !orderSaved &&
-          /কনফার্ম|অর্ডারটি গৃহীত|অর্ডার কনফার্ম|order (is )?confirmed/i.test(reply)
-        ) {
+        // marker (happens in follow-up turns, and the exact confirmation
+        // phrasing varies too much to gate on). Whenever the conversation
+        // contains a phone number and no order was saved this turn, try to
+        // extract the order from the transcript — the extractor itself
+        // returns null unless name + phone + product are all present, and
+        // tryCreateOrder dedupes repeats.
+        if (!orderSaved) {
           try {
             // NOTE: history was already reversed to chronological order above.
             const transcript = [
