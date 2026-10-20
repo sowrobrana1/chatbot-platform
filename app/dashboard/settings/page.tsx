@@ -2,12 +2,32 @@
 
 import { useEffect, useState } from "react";
 
+const PLAN_LABELS: Record<string, string> = {
+  free: "ফ্রি",
+  starter: "স্টার্টার",
+  pro: "প্রো",
+};
+
+const PLAN_PRICES: Record<string, string> = {
+  free: "৳০/মাস",
+  starter: "৳৪৯৯/মাস",
+  pro: "৳১,৪৯৯/মাস",
+};
+
+const PLAN_LIMITS: Record<string, string> = {
+  free: "সর্বোচ্চ ২০টি প্রোডাক্ট",
+  starter: "সর্বোচ্চ ২০০টি প্রোডাক্ট",
+  pro: "আনলিমিটেড প্রোডাক্ট",
+};
+
 export default function SettingsPage() {
   const [s, setS] = useState<any>(null);
   const [saved, setSaved] = useState("");
+  const [me, setMe] = useState<any>(null);
 
   useEffect(() => {
     fetch("/api/settings").then((r) => r.json()).then((d) => setS(d || {}));
+    fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((d) => setMe(d?.user || null));
   }, []);
 
   const save = async () => {
@@ -47,6 +67,33 @@ export default function SettingsPage() {
   return (
     <div>
       <h1>⚙️ সেটিংস</h1>
+
+      {me && section("💳 সাবস্ক্রিপশন", <>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 12, color: "#6b7280" }}>বর্তমান প্ল্যান</div>
+            <div style={{ fontSize: 22, fontWeight: 800 }}>{PLAN_LABELS[me.plan] || me.plan}
+              <span style={{ fontSize: 14, fontWeight: 400, color: "#6b7280" }}> ({PLAN_PRICES[me.plan] || ""})</span>
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: "#6b7280" }}>লিমিট</div>
+            <div style={{ fontWeight: 600 }}>{PLAN_LIMITS[me.plan] || "—"}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: "#6b7280" }}>মেয়াদ শেষ</div>
+            <div style={{ fontWeight: 600 }}>
+              {me.planExpiresAt
+                ? new Date(me.planExpiresAt).toLocaleDateString("bn-BD")
+                : me.plan === "free" ? "প্রযোজ্য নয়" : "—"}
+            </div>
+          </div>
+        </div>
+        <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 8 }}>
+          ⬆️ আপগ্রেড করতে: <strong>স্টার্টার ৳৪৯৯/মাস</strong> · <strong>প্রো ৳১,৪৯৯/মাস</strong> — পেমেন্টের জন্য সাপোর্টে যোগাযোগ করুন।
+        </div>
+        <div style={{ fontSize: 12, color: "#6b7280" }}>যোগাযোগ: ০১৯৬৯-৫৯৮০৫৫</div>
+      </>)}
 
       {section("🏪 ব্যবসার তথ্য", <>
         {field("businessName", "ব্যবসার নাম (বাংলা)")}
