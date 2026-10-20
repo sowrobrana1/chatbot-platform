@@ -67,7 +67,10 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     console.error("signup failed:", e);
     return NextResponse.json(
-      { error: "কিছু একটা ভুল হয়েছে। আবার চেষ্টা করুন।" },
+      {
+        error: "কিছু একটা ভুল হয়েছে। আবার চেষ্টা করুন।",
+        detail: e instanceof Error ? e.message.slice(0, 400) : String(e).slice(0, 400),
+      },
       { status: 500 }
     );
   }
