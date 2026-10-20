@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { generateBotReply, generateImageReply, BotContext } from "@/lib/ai";
+import {
+  generateBotReply,
+  generateImageReply,
+  generatePaymentCheck,
+  BotContext,
+  CatalogImage,
+} from "@/lib/ai";
 import { sendFacebookMessage, verifyFacebookSignature } from "@/lib/facebook";
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +16,7 @@ export const dynamic = 'force-dynamic';
  * GET  -> verification (Meta calls this when you configure the webhook)
  * POST -> incoming messages
  *
- * TODO: In Meta App Dashboard > Messenger > Settings, set:
+ * In Meta App Dashboard > Messenger > Settings, set:
  *   Callback URL: https://YOUR-DOMAIN/api/webhooks/facebook
  *   Verify Token: same as FB_VERIFY_TOKEN in .env
  *   Subscribe to: messages, messaging_postbacks
@@ -31,14 +37,20 @@ export async function GET(req: NextRequest) {
   return new NextResponse("Forbidden", { status: 403 });
 }
 
-async function buildContext(userId: string): Promise<BotContext> {
+async function buildContext(
+  userId: string,
+  pendingAdvance: { amount: number; productName: string } | null
+): Promise<BotContext> {
   const settings = await prisma.settings.findUnique({ where: { userId } });
   const products = await prisma.product.findMany({
     where: { userId, active: true },
-    select: { nameBn: true, nameEn: true, price: true, stock: true },
+    select: {
+      nameBn: true, nameEn: true, price: true, stock: true,
+      colors: true, sizes: true, freeDelivery: true, deliveryAdvance: true,
+    },
   });
   return {
-    businessName: settings?.businessName || "আমাদের শপ",
+    businessName: settings?.businessName || settings?.businessNameEn || "আমাদের শপ",
     products,
     deliveryInsideDhaka: settings?.deliveryInsideDhaka ?? 60,
     deliveryOutsideDhaka: settings?.deliveryOutsideDhaka ?? 120,
@@ -46,7 +58,23 @@ async function buildContext(userId: string): Promise<BotContext> {
     language: (settings?.botLanguage as "bn" | "en") || "bn",
     tone: settings?.botTone || "friendly",
     systemPrompt: settings?.systemPrompt || "",
+    bkashNumber: settings?.bkashNumber || "",
+    nagadNumber: settings?.nagadNumber || "",
+    rocketNumber: settings?.rocketNumber || "",
+    pendingAdvance,
   };
+}
+
+function parseMarker(reply: string, tag: string): { data: Record<string, string> | null; clean: string } {
+  const re = new RegExp(`\\[\\[${tag}\\|([^\\]]+)\\]\\]`);
+  const m = reply.match(re);
+  if (!m) return { data: null, clean: reply };
+  const data: Record<string, string> = {};
+  for (const part of m[1].split("|")) {
+    const idx = part.indexOf("=");
+    if (idx > 0) data[part.slice(0, idx).trim().toLowerCase()] = part.slice(idx + 1).trim();
+  }
+  return { data, clean: reply.replace(re, "").trim() };
 }
 
 export async function POST(req: NextRequest) {
@@ -75,14 +103,15 @@ export async function POST(req: NextRequest) {
         include: { user: true },
       });
       if (!settings) continue;
+      const userId = settings.userId;
 
       // Save conversation
       let convo = await prisma.conversation.findFirst({
-        where: { userId: settings.userId, channel: "facebook", senderId },
+        where: { userId, channel: "facebook", senderId },
       });
       if (!convo) {
         convo = await prisma.conversation.create({
-          data: { userId: settings.userId, channel: "facebook", senderId },
+          data: { userId, channel: "facebook", senderId },
         });
       }
       await prisma.message.create({
@@ -93,23 +122,87 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Generate + send reply
-      const ctx = await buildContext(settings.userId);
-      let reply: string;
+      // Is there an earlier order from this customer with an unpaid advance?
+      const pendingOrder = await prisma.order.findFirst({
+        where: { userId, senderId, channel: "facebook", advanceStatus: "pending" },
+        orderBy: { createdAt: "desc" },
+        include: { items: true },
+      });
+      const pendingAdvance = pendingOrder
+        ? {
+            amount: pendingOrder.advanceAmount,
+            productName: pendingOrder.items[0]?.productName || "অর্ডার",
+          }
+        : null;
+
+      const ctx = await buildContext(userId, pendingAdvance);
+      let reply: string | null = null;
+
+      // --- Customer sent an image ---
       if (imageUrl) {
-        // Customer sent a product photo/screenshot: download it and let the
-        // vision model match it against catalog product photos.
         try {
           const imgRes = await fetch(imageUrl);
           if (!imgRes.ok) throw new Error(`image fetch ${imgRes.status}`);
           const mime = imgRes.headers.get("content-type") || "image/jpeg";
           const buf = Buffer.from(await imgRes.arrayBuffer());
           const dataUri = `data:${mime};base64,${buf.toString("base64")}`;
-          const catalog = await prisma.product.findMany({
-            where: { userId: settings.userId, active: true, NOT: { imageUrl: "" } },
-            select: { nameBn: true, nameEn: true, price: true, stock: true, imageUrl: true },
-          });
-          reply = await generateImageReply(dataUri, ctx, catalog);
+
+          // If an advance payment is outstanding, first check whether this
+          // image is a payment receipt for it.
+          if (pendingOrder) {
+            const check = await generatePaymentCheck(dataUri, pendingOrder.advanceAmount);
+            if (check?.looksLikePayment) {
+              if (check.amount !== null && check.amount >= pendingOrder.advanceAmount) {
+                await prisma.order.update({
+                  where: { id: pendingOrder.id },
+                  data: {
+                    advanceStatus: "claimed",
+                    advanceTrxId: check.trxId,
+                    advanceSender: check.sender,
+                  },
+                });
+                reply =
+                  ctx.language === "bn"
+                    ? `ধন্যবাদ! ✅ আপনার পেমেন্টের ছবি পেয়েছি — ৳${check.amount}${check.trxId ? `, TrxID: ${check.trxId}` : ""}। আমরা যাচাই করে আপনার অর্ডারটি কনফার্ম করছি।`
+                    : `Thank you! ✅ Payment screenshot received — ৳${check.amount}${check.trxId ? `, TrxID: ${check.trxId}` : ""}. We will verify and confirm your order.`;
+              } else {
+                reply =
+                  ctx.language === "bn"
+                    ? `আপনার পেমেন্টের ছবি পেয়েছি, কিন্তু পরিমাণ মিলছে না। এই অর্ডারের ডেলিভারি চার্জ অগ্রিম লাগবে ৳${pendingOrder.advanceAmount}। অনুগ্রহ করে সঠিক পরিমাণ পাঠিয়ে আবার স্ক্রিনশটটি দিন, অথবা TrxID নম্বরটি লিখে পাঠান।`
+                    : `I received your payment screenshot, but the amount doesn't match. The advance delivery charge for this order is ৳${pendingOrder.advanceAmount}. Please send the correct amount and share the screenshot or TrxID.`;
+              }
+            }
+          }
+
+          // Otherwise treat it as a product photo: match against the catalog.
+          if (!reply) {
+            const prods = await prisma.product.findMany({
+              where: { userId, active: true },
+              select: {
+                nameBn: true, nameEn: true, price: true, stock: true,
+                imageUrl: true, images: true,
+              },
+            });
+            const catalog: CatalogImage[] = [];
+            for (const p of prods) {
+              let imgs: { url: string; color?: string }[] = [];
+              try {
+                const parsed = JSON.parse(p.images || "[]");
+                if (Array.isArray(parsed)) imgs = parsed.filter((x: any) => x?.url);
+              } catch { /* legacy single image below */ }
+              if (imgs.length === 0 && p.imageUrl) imgs = [{ url: p.imageUrl }];
+              for (const im of imgs) {
+                catalog.push({
+                  nameBn: im.color ? `${p.nameBn} (${im.color})` : p.nameBn,
+                  nameEn: p.nameEn,
+                  price: p.price,
+                  stock: p.stock,
+                  imageUrl: im.url,
+                });
+              }
+            }
+            reply = await generateImageReply(dataUri, ctx, catalog);
+          }
         } catch (e) {
           console.error("FB image handling failed:", e);
           reply =
@@ -117,7 +210,10 @@ export async function POST(req: NextRequest) {
               ? "দুঃখিত, ছবিটি দেখতে পারিনি। কোন প্রোডাক্টটি খুঁজছেন নাম লিখে পাঠান, দাম জানিয়ে দিচ্ছি।"
               : "Sorry, I couldn't view the image. Please type the product name and I'll share the price.";
         }
-      } else {
+      }
+
+      // --- Normal text message ---
+      if (!reply) {
         const history = await prisma.message.findMany({
           where: { conversationId: convo.id },
           orderBy: { createdAt: "desc" },
@@ -131,6 +227,78 @@ export async function POST(req: NextRequest) {
             content: m.text,
           }))
         );
+
+        // Customer says they paid the advance (bot emits a PAID marker)
+        const paid = parseMarker(reply, "PAID");
+        if (paid.data) {
+          reply = paid.clean;
+          if (pendingOrder) {
+            await prisma.order.update({
+              where: { id: pendingOrder.id },
+              data: {
+                advanceStatus: "claimed",
+                advanceTrxId: paid.data.trx || "",
+                advanceSender: paid.data.sender || "",
+              },
+            });
+          }
+        }
+
+        // Bot completed an order (ORDER marker) -> save it for real
+        const ord = parseMarker(reply, "ORDER");
+        if (ord.data) {
+          reply = ord.clean;
+          try {
+            const d = ord.data;
+            const all = await prisma.product.findMany({ where: { userId, active: true } });
+            const want = (d.product || "").trim().toLowerCase();
+            const product =
+              all.find((p: any) => p.nameBn.trim().toLowerCase() === want || p.nameEn.trim().toLowerCase() === want) ||
+              all.find((p: any) => p.nameBn.toLowerCase().includes(want) || want.includes(p.nameBn.trim().toLowerCase()));
+            if (product) {
+              const qty = Math.max(1, parseInt(d.qty || "1", 10) || 1);
+              const address = d.address || "";
+              const inDhaka = /ঢাকা|dhaka/i.test(address);
+              const delivery = product.freeDelivery
+                ? 0
+                : inDhaka
+                  ? ctx.deliveryInsideDhaka
+                  : ctx.deliveryOutsideDhaka;
+              const needsAdvance = product.deliveryAdvance && delivery > 0;
+              await prisma.order.create({
+                data: {
+                  userId,
+                  customerName: d.name || "Messenger Customer",
+                  customerPhone: d.phone || "",
+                  customerAddress: address,
+                  channel: "facebook",
+                  senderId,
+                  status: "pending",
+                  subtotal: product.price * qty,
+                  deliveryCharge: delivery,
+                  total: product.price * qty + delivery,
+                  advanceAmount: needsAdvance ? delivery : 0,
+                  advanceStatus: needsAdvance ? "pending" : "none",
+                  notes: `কালার: ${d.color || "-"}, সাইজ: ${d.size || "-"}`,
+                  items: {
+                    create: [
+                      {
+                        productId: product.id,
+                        productName: product.nameBn,
+                        color: d.color || "",
+                        size: d.size || "",
+                        quantity: qty,
+                        price: product.price,
+                      },
+                    ],
+                  },
+                },
+              });
+            }
+          } catch (e) {
+            console.error("Order creation from marker failed:", e);
+          }
+        }
       }
 
       await prisma.message.create({
