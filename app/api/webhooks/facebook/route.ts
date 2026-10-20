@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { generateBotReply, BotContext } from "@/lib/ai";
+import { generateBotReply, generateImageReply, BotContext } from "@/lib/ai";
 import { sendFacebookMessage, verifyFacebookSignature } from "@/lib/facebook";
 
 export const dynamic = 'force-dynamic';
@@ -63,7 +63,11 @@ export async function POST(req: NextRequest) {
     for (const event of entry.messaging || []) {
       const senderId = event.sender?.id;
       const text = event.message?.text;
-      if (!senderId || !text || event.message?.is_echo) continue;
+      const imageUrl: string | undefined = (event.message?.attachments || []).find(
+        (a: any) => a.type === "image"
+      )?.payload?.url;
+      if (!senderId || event.message?.is_echo) continue;
+      if (!text && !imageUrl) continue;
 
       // Find the owner of this page
       const settings = await prisma.settings.findFirst({
@@ -82,24 +86,52 @@ export async function POST(req: NextRequest) {
         });
       }
       await prisma.message.create({
-        data: { conversationId: convo.id, role: "user", text },
+        data: {
+          conversationId: convo.id,
+          role: "user",
+          text: text || "[কাস্টমার একটি ছবি পাঠিয়েছেন]",
+        },
       });
 
       // Generate + send reply
       const ctx = await buildContext(settings.userId);
-      const history = await prisma.message.findMany({
-        where: { conversationId: convo.id },
-        orderBy: { createdAt: "desc" },
-        take: 10,
-      });
-      const reply = await generateBotReply(
-        text,
-        ctx,
-        history.reverse().map((m) => ({
-          role: m.role === "bot" ? ("assistant" as const) : ("user" as const),
-          content: m.text,
-        }))
-      );
+      let reply: string;
+      if (imageUrl) {
+        // Customer sent a product photo/screenshot: download it and let the
+        // vision model match it against catalog product photos.
+        try {
+          const imgRes = await fetch(imageUrl);
+          if (!imgRes.ok) throw new Error(`image fetch ${imgRes.status}`);
+          const mime = imgRes.headers.get("content-type") || "image/jpeg";
+          const buf = Buffer.from(await imgRes.arrayBuffer());
+          const dataUri = `data:${mime};base64,${buf.toString("base64")}`;
+          const catalog = await prisma.product.findMany({
+            where: { userId: settings.userId, active: true, NOT: { imageUrl: "" } },
+            select: { nameBn: true, nameEn: true, price: true, stock: true, imageUrl: true },
+          });
+          reply = await generateImageReply(dataUri, ctx, catalog);
+        } catch (e) {
+          console.error("FB image handling failed:", e);
+          reply =
+            ctx.language === "bn"
+              ? "দুঃখিত, ছবিটি দেখতে পারিনি। কোন প্রোডাক্টটি খুঁজছেন নাম লিখে পাঠান, দাম জানিয়ে দিচ্ছি।"
+              : "Sorry, I couldn't view the image. Please type the product name and I'll share the price.";
+        }
+      } else {
+        const history = await prisma.message.findMany({
+          where: { conversationId: convo.id },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        });
+        reply = await generateBotReply(
+          text as string,
+          ctx,
+          history.reverse().map((m) => ({
+            role: m.role === "bot" ? ("assistant" as const) : ("user" as const),
+            content: m.text,
+          }))
+        );
+      }
 
       await prisma.message.create({
         data: { conversationId: convo.id, role: "bot", text: reply },
