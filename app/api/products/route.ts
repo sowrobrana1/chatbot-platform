@@ -20,6 +20,13 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const data = await req.json();
+  // Product photos are stored as compressed data URIs in imageUrl; cap the size.
+  if (typeof data.imageUrl === "string" && data.imageUrl.length > 900000) {
+    return NextResponse.json(
+      { error: "ছবিটি খুব বড়। ছোট/কম রেজোলিউশনের ছবি দিন।" },
+      { status: 413 }
+    );
+  }
   const limit = productLimitForPlan(user.plan);
   if (limit !== Infinity) {
     const count = await prisma.product.count({ where: { userId: user.id } });
