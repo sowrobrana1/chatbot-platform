@@ -101,14 +101,20 @@ export async function generateBotReply(
       const gemini = new OpenAI({
         apiKey: geminiKey,
         baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+        // Hard limits: without these the SDK waits up to 10 min per attempt
+        // (and retries), which makes Facebook redeliver the same message and
+        // the customer gets multiple contradictory replies.
+        timeout: 15000,
+        maxRetries: 0,
       });
       // Model chain: individual Gemini models periodically return 404/503 for
       // new free-tier accounts, so try each in order until one answers.
+      // The stable "latest" alias goes first — preview models hang more.
       const models = [
         process.env.GEMINI_MODEL,
+        "gemini-flash-latest",
         "gemini-3-flash-preview",
         "gemini-3.8-flash",
-        "gemini-flash-latest",
       ].filter((m, i, a): m is string => !!m && a.indexOf(m) === i);
       let lastErr: unknown = null;
       for (const model of models) {
@@ -182,15 +188,17 @@ function geminiClient() {
   return new OpenAI({
     apiKey: key,
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+    timeout: 15000,
+    maxRetries: 0,
   });
 }
 
 function geminiModels(): string[] {
   return [
     process.env.GEMINI_MODEL,
+    "gemini-flash-latest",
     "gemini-3-flash-preview",
     "gemini-3.8-flash",
-    "gemini-flash-latest",
   ].filter((m, i, a): m is string => !!m && a.indexOf(m) === i);
 }
 
