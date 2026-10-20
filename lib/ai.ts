@@ -53,16 +53,33 @@ export async function generateBotReply(
         apiKey: process.env.GEMINI_API_KEY,
         baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
       });
-      const res = await gemini.chat.completions.create({
-        model: process.env.GEMINI_MODEL || "gemini-3.8-flash",
-        messages: [
-          { role: "system", content: system },
-          ...history,
-          { role: "user", content: userMessage },
-        ],
-        max_tokens: 500,
-      });
-      return res.choices[0]?.message?.content?.trim() || fallbackReply(ctx);
+      // Model chain: individual Gemini models periodically return 404/503 for
+      // new free-tier accounts, so try each in order until one answers.
+      const models = [
+        process.env.GEMINI_MODEL,
+        "gemini-3-flash-preview",
+        "gemini-3.8-flash",
+        "gemini-flash-latest",
+      ].filter((m, i, a): m is string => !!m && a.indexOf(m) === i);
+      let lastErr: unknown = null;
+      for (const model of models) {
+        try {
+          const res = await gemini.chat.completions.create({
+            model,
+            messages: [
+              { role: "system", content: system },
+              ...history,
+              { role: "user", content: userMessage },
+            ],
+            max_tokens: 800,
+          });
+          const text = res.choices[0]?.message?.content?.trim();
+          if (text) return text;
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      throw lastErr instanceof Error ? lastErr : new Error("All Gemini models failed");
     }
 
     if (provider === "openai") {
