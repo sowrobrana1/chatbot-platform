@@ -132,6 +132,15 @@ export default function SettingsPage() {
         <label><input type="checkbox" checked={!!s.codEnabled} onChange={(e) => setS({ ...s, codEnabled: e.target.checked })} /> ক্যাশ অন ডেলিভারি চালু</label>
       </>)}
 
+      {section("💳 পেমেন্ট নম্বর (অগ্রিম ডেলিভারি চার্জের জন্য)", <>
+        <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 12 }}>
+          যেসব প্রোডাক্টে &quot;ডেলিভারি চার্জ অগ্রিম&quot; মার্ক করবেন, সেগুলোতে বট কাস্টমারকে এই নম্বরগুলো দিয়ে টাকা পাঠাতে বলবে।
+        </div>
+        {field("bkashNumber", "বিকাশ নম্বর")}
+        {field("nagadNumber", "নগদ নম্বর")}
+        {field("rocketNumber", "রকেট নম্বর")}
+      </>)}
+
       {section("📘 Facebook Messenger", <>
         {field("fbPageId", "Page ID")}
         {field("fbPageToken", "Page Access Token (খালি রাখলে আগেরটা থাকবে)")}
