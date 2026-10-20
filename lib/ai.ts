@@ -85,39 +85,20 @@ export async function generateBotReply(
   ctx: BotContext,
   history: { role: "user" | "assistant"; content: string }[] = []
 ): Promise<string> {
-  const geminiKey =
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.GEMINI_KEY ||
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const keys = geminiKeys();
   const provider: AiProvider =
     (process.env.AI_PROVIDER as AiProvider) ||
-    (geminiKey ? "gemini" : "anthropic");
+    (keys.length ? "gemini" : "anthropic");
   const system = buildSystemPrompt(ctx);
 
   try {
     if (provider === "gemini") {
-      if (!geminiKey) throw new Error("GEMINI_API_KEY missing");
-      const gemini = new OpenAI({
-        apiKey: geminiKey,
-        baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-        // Hard limits: without these the SDK waits up to 10 min per attempt
-        // (and retries), which makes Facebook redeliver the same message and
-        // the customer gets multiple contradictory replies.
-        timeout: 15000,
-        maxRetries: 0,
-      });
-      // Model chain: individual Gemini models periodically return 404/503 for
-      // new free-tier accounts, so try each in order until one answers.
-      // The stable "latest" alias goes first — preview models hang more.
-      const models = [
-        process.env.GEMINI_MODEL,
-        "gemini-flash-latest",
-        "gemini-3-flash-preview",
-        "gemini-3.8-flash",
-      ].filter((m, i, a): m is string => !!m && a.indexOf(m) === i);
+      if (!keys.length) throw new Error("GEMINI_API_KEY missing");
+      const models = geminiModels();
       let lastErr: unknown = null;
-      for (const model of models) {
+      for (const key of keys) {
+        const gemini = geminiClientFor(key);
+        for (const model of models) {
         try {
           const res = await gemini.chat.completions.create({
             model,
@@ -134,6 +115,7 @@ export async function generateBotReply(
           lastErr = e;
         }
       }
+        }
       throw lastErr instanceof Error ? lastErr : new Error("All Gemini models failed");
     }
 
@@ -178,19 +160,30 @@ export interface CatalogImage {
   imageUrl: string; // data URI (or https URL) of the product photo
 }
 
-function geminiClient() {
-  const key =
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.GEMINI_KEY ||
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  if (!key) return null;
+function geminiKeys(): string[] {
+  return [
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+    process.env.GOOGLE_API_KEY,
+    process.env.GEMINI_KEY,
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+  ].filter((v, i, a): v is string => !!v && a.indexOf(v) === i);
+}
+
+function geminiClientFor(key: string) {
   return new OpenAI({
     apiKey: key,
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
     timeout: 15000,
     maxRetries: 0,
   });
+}
+
+function geminiClient() {
+  const keys = geminiKeys();
+  if (!keys.length) return null;
+  return geminiClientFor(keys[Math.floor(Math.random() * keys.length)]);
 }
 
 function geminiModels(): string[] {
