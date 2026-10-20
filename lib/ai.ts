@@ -54,7 +54,7 @@ export async function generateBotReply(
         baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
       });
       const res = await gemini.chat.completions.create({
-        model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+        model: process.env.GEMINI_MODEL || "gemini-3.8-flash",
         messages: [
           { role: "system", content: system },
           ...history,
