@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 
 export const dynamic = 'force-dynamic';
 
-const DEMO_USER_ID = "demo-user";
-
 export async function GET(req: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const status = req.nextUrl.searchParams.get("status");
   const orders = await prisma.order.findMany({
     where: {
-      userId: DEMO_USER_ID,
+      userId: user.id,
       ...(status ? { status } : {}),
     },
     include: { items: { include: { product: true } } },
@@ -19,10 +21,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const data = await req.json();
   const order = await prisma.order.create({
     data: {
-      userId: DEMO_USER_ID,
+      userId: user.id,
       customerName: data.customerName,
       customerPhone: data.customerPhone,
       customerAddress: data.customerAddress || "",
