@@ -11,6 +11,7 @@ import {
 import { sendFacebookMessage, verifyFacebookSignature } from "@/lib/facebook";
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 /**
  * Facebook Messenger webhook.
@@ -217,6 +218,23 @@ export async function POST(req: NextRequest) {
           data: { userId, channel: "facebook", senderId },
         });
       }
+      // Facebook redelivers the same event when the first delivery is slow;
+      // an identical text from this sender within 3 minutes is a duplicate —
+      // skip it so the customer never gets two contradictory replies.
+      if (text) {
+        const lastUserMsg = await prisma.message.findFirst({
+          where: { conversationId: convo.id, role: "user" },
+          orderBy: { createdAt: "desc" },
+        });
+        if (
+          lastUserMsg &&
+          lastUserMsg.text === text &&
+          Date.now() - lastUserMsg.createdAt.getTime() < 3 * 60 * 1000
+        ) {
+          continue;
+        }
+      }
+
       await prisma.message.create({
         data: {
           conversationId: convo.id,
