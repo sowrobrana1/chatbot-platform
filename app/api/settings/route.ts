@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 
 export const dynamic = 'force-dynamic';
 
-const DEMO_USER_ID = "demo-user";
-
 export async function GET() {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const settings = await prisma.settings.findUnique({
-    where: { userId: DEMO_USER_ID },
+    where: { userId: user.id },
   });
   // Never leak full tokens to the client
   if (settings) {
@@ -22,6 +24,9 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const data = await req.json();
   const allowed = [
     "businessName", "businessNameEn", "phone", "address",
@@ -35,9 +40,9 @@ export async function PUT(req: NextRequest) {
     if (data[k] !== undefined) update[k] = data[k];
   }
   const settings = await prisma.settings.upsert({
-    where: { userId: DEMO_USER_ID },
+    where: { userId: user.id },
     update,
-    create: { userId: DEMO_USER_ID, ...update },
+    create: { userId: user.id, ...update },
   });
   return NextResponse.json({ ok: true });
 }
