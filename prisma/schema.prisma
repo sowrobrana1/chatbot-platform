@@ -41,6 +41,10 @@ model Settings {
   deliveryInsideDhaka  Int @default(60)
   deliveryOutsideDhaka Int @default(120)
   codEnabled    Boolean @default(true)
+  // Payment numbers (for advance delivery-charge collection)
+  bkashNumber   String  @default("")
+  nagadNumber   String  @default("")
+  rocketNumber  String  @default("")
   // Facebook
   fbPageId      String  @default("")
   fbPageToken   String  @default("") @db.Text
@@ -63,6 +67,11 @@ model Product {
   stock     Int      @default(0)
   sku       String   @default("")
   imageUrl  String   @default("")
+  images    String   @default("") @db.Text // JSON: [{url, color}] — all variant photos
+  colors    String   @default("") // e.g. "কমলা, কালো, সাদা"
+  sizes     String   @default("") // e.g. "M, L, XL"
+  freeDelivery    Boolean @default(false) // offer: no delivery charge
+  deliveryAdvance Boolean @default(false) // delivery charge must be paid in advance
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -77,7 +86,12 @@ model Order {
   customerPhone String
   customerAddress String @db.Text
   channel     String   @default("web") // web | facebook | whatsapp
+  senderId    String   @default("") // PSID / wa id of the customer (for reminders)
   status      String   @default("pending") // pending | confirmed | shipped | delivered | cancelled
+  advanceAmount Int    @default(0) // delivery charge to be paid in advance (0 = none)
+  advanceStatus String @default("none") // none | pending | claimed | confirmed
+  advanceTrxId  String @default("")
+  advanceSender String @default("")
   subtotal    Int      @default(0)
   deliveryCharge Int   @default(0)
   total       Int      @default(0)
@@ -93,6 +107,9 @@ model OrderItem {
   order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId String
   product   Product @relation(fields: [productId], references: [id])
+  productName String @default("") // snapshot of the product name at order time
+  color     String  @default("")
+  size      String  @default("")
   quantity  Int     @default(1)
   price     Int
 }
