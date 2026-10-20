@@ -32,6 +32,7 @@ export async function PUT(req: NextRequest) {
     "businessName", "businessNameEn", "phone", "address",
     "aiProvider", "aiModel", "systemPrompt", "botLanguage", "botTone",
     "deliveryInsideDhaka", "deliveryOutsideDhaka", "codEnabled",
+    "bkashNumber", "nagadNumber", "rocketNumber",
     "fbPageId", "fbPageToken", "fbVerifyToken", "fbConnected",
     "waPhoneNumberId", "waAccessToken", "waVerifyToken", "waConnected",
   ];
