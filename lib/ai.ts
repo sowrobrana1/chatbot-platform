@@ -3,31 +3,74 @@ import OpenAI from "openai";
 
 export type AiProvider = "anthropic" | "openai" | "gemini";
 
+export interface BotProduct {
+  nameBn: string;
+  nameEn: string;
+  price: number;
+  stock: number;
+  colors?: string;
+  sizes?: string;
+  freeDelivery?: boolean;
+  deliveryAdvance?: boolean;
+}
+
 export interface BotContext {
   businessName: string;
-  products: { nameBn: string; nameEn: string; price: number; stock: number }[];
+  products: BotProduct[];
   deliveryInsideDhaka: number;
   deliveryOutsideDhaka: number;
   codEnabled: boolean;
   language: "bn" | "en";
   tone: string;
   systemPrompt: string;
+  bkashNumber?: string;
+  nagadNumber?: string;
+  rocketNumber?: string;
+  /** An earlier order by this customer whose advance delivery charge is unpaid. */
+  pendingAdvance?: { amount: number; productName: string } | null;
 }
 
 function buildSystemPrompt(ctx: BotContext): string {
   const productList =
     ctx.products.length > 0
       ? ctx.products
-          .map((p) => `- ${p.nameBn}${p.nameEn ? ` (${p.nameEn})` : ""}: ৳${p.price} (স্টক: ${p.stock})`)
+          .map((p) => {
+            let line = `- ${p.nameBn}${p.nameEn ? ` (${p.nameEn})` : ""}: ৳${p.price} (স্টক: ${p.stock})`;
+            if (p.colors) line += ` | কালার: ${p.colors}`;
+            if (p.sizes) line += ` | সাইজ: ${p.sizes}`;
+            if (p.freeDelivery) line += ` | 🎁 এই প্রোডাক্টে ডেলিভারি সম্পূর্ণ ফ্রি`;
+            if (p.deliveryAdvance) line += ` | ⚠️ এই প্রোডাক্টে ডেলিভারি চার্জ অগ্রিম পাঠাতে হয়`;
+            return line;
+          })
           .join("\n")
       : "(কোনো প্রোডাক্ট যোগ করা হয়নি)";
 
+  const payLines = [
+    ctx.bkashNumber ? `বিকাশ: ${ctx.bkashNumber}` : "",
+    ctx.nagadNumber ? `নগদ: ${ctx.nagadNumber}` : "",
+    ctx.rocketNumber ? `রকেট: ${ctx.rocketNumber}` : "",
+  ].filter(Boolean);
+  const payBlock = payLines.length
+    ? `\n\nঅগ্রিম পেমেন্টের নম্বর:\n${payLines.join("\n")}`
+    : "";
+
+  const orderProtocol =
+    ctx.language === "bn"
+      ? `\n\nঅর্ডার নেওয়ার নিয়ম:\n১) কাস্টমার অর্ডার করতে চাইলে একে একে জিজ্ঞেস করো: প্রোডাক্ট, কালার (তালিকার কালার থেকে), সাইজ (তালিকার সাইজ থেকে), কয় পিস, তারপর নাম, মোবাইল নম্বর, পুরো ঠিকানা (জেলা/এলাকাসহ)।\n২) সব তথ্য পেলে অর্ডারের সারসংক্ষেপ (প্রোডাক্ট, কালার, সাইজ, পিস, মোট দাম + ডেলিভারি চার্জ) দেখিয়ে কনফার্ম করো এবং উত্তরের একদম শেষে হুবহু এই ফরম্যাটে একটি গোপন লাইন যোগ করো (কাস্টমারকে এই লাইনের কথা বলবে না):\n[[ORDER|product=প্রোডাক্টের নাম|color=কালার|size=সাইজ|qty=সংখ্যা|name=নাম|phone=ফোন|address=ঠিকানা]]\n৩) প্রোডাক্টে "ডেলিভারি ফ্রি" থাকলে ডেলিভারি চার্জ ৳০ ধরবে এবং অফারটি আনন্দের সাথে জানাবে।\n৪) প্রোডাক্টে "ডেলিভারি চার্জ অগ্রিম" থাকলে অর্ডারের পর কাস্টমারকে বলবে: ডেলিভারি চার্জ ৳<পরিমাণ> নিচের নম্বরে বিকাশ/নগদ/রকেটে পাঠিয়ে লেনদেনের TrxID নম্বরটি বা পেমেন্টের স্ক্রিনশটটি পাঠাতে। টাকা পাঠানো ছাড়া অর্ডারটি প্রসেস হবে না — এটি ভদ্রভাবে জানাবে।\n৫) কাস্টমার টাকা পাঠিয়েছি বললে বা TrxID দিলে ধন্যবাদ জানাবে এবং উত্তরের শেষে গোপন লাইন যোগ করবে:\n[[PAID|trx=TrxID|sender=যে নম্বর থেকে পাঠিয়েছে]]`
+      : `\n\nOrder rules: collect product, color, size, quantity, then name, phone, full address. When complete, show a summary and append exactly one hidden line at the very end:\n[[ORDER|product=<name>|color=<color>|size=<size>|qty=<n>|name=<name>|phone=<phone>|address=<address>]]\nFree-delivery products have ৳0 delivery — say so happily. For advance-delivery-charge products, ask the customer to send the delivery charge to the payment number below and share the TrxID or a payment screenshot. If the customer says they paid or shares a TrxID, thank them and append: [[PAID|trx=<id>|sender=<number>]]`;
+
+  const advanceReminder = ctx.pendingAdvance
+    ? ctx.language === "bn"
+      ? `\n\n⚠️ এই কাস্টমারের আগের অর্ডারে (${ctx.pendingAdvance.productName}) ডেলিভারি চার্জ ৳${ctx.pendingAdvance.amount} অগ্রিম এখনো বাকি আছে। তোমার উত্তরের শুরুতেই ভদ্রভাবে সেটি মনে করিয়ে দাও এবং TrxID বা পেমেন্টের স্ক্রিনশট পাঠাতে বলো। টাকা না পেলে ওই অর্ডারটি পাঠানো হবে না।`
+      : `\n\nNote: this customer still owes a ৳${ctx.pendingAdvance.amount} advance delivery charge for a previous order (${ctx.pendingAdvance.productName}). Politely remind them at the start of your reply and ask for the TrxID or payment screenshot.`
+    : "";
+
   const base =
     ctx.language === "bn"
-      ? `তুমি "${ctx.businessName}"-এর AI সেলস এজেন্ট। বাংলায় বন্ধুসুলভ ভঙ্গিতে উত্তর দাও।\n\nপ্রোডাক্ট তালিকা:\n${productList}\n\nডেলিভারি চার্জ: ঢাকার ভিতরে ৳${ctx.deliveryInsideDhaka}, ঢাকার বাইরে ৳${ctx.deliveryOutsideDhaka}।\n${ctx.codEnabled ? "ক্যাশ অন ডেলিভারি চালু আছে।" : ""}\n\nনিয়ম: শুধু উপরের তালিকার প্রোডাক্ট সম্পর্কে বলো। দাম বানিয়ে বলো না। অর্ডার নিতে চাইলে নাম, ফোন, ঠিকানা চাও।`
-      : `You are the AI sales agent for "${ctx.businessName}". Reply in a friendly tone.\n\nProducts:\n${productList}\n\nDelivery: ৳${ctx.deliveryInsideDhaka} inside Dhaka, ৳${ctx.deliveryOutsideDhaka} outside.\n${ctx.codEnabled ? "Cash on delivery available." : ""}\n\nRules: only mention products from the list above. Never invent prices. To take an order, ask for name, phone, address.`;
+      ? `তুমি "${ctx.businessName}"-এর AI সেলস এজেন্ট। বাংলায় বন্ধুসুলভ ভঙ্গিতে উত্তর দাও।\n\nপ্রোডাক্ট তালিকা:\n${productList}\n\nডেলিভারি চার্জ: ঢাকার ভিতরে ৳${ctx.deliveryInsideDhaka}, ঢাকার বাইরে ৳${ctx.deliveryOutsideDhaka}।\n${ctx.codEnabled ? "ক্যাশ অন ডেলিভারি চালু আছে।" : ""}${payBlock}\n\nনিয়ম: শুধু উপরের তালিকার প্রোডাক্ট সম্পর্কে বলো। দাম বানিয়ে বলো না।`
+      : `You are the AI sales agent for "${ctx.businessName}". Reply in a friendly tone.\n\nProducts:\n${productList}\n\nDelivery: ৳${ctx.deliveryInsideDhaka} inside Dhaka, ৳${ctx.deliveryOutsideDhaka} outside.\n${ctx.codEnabled ? "Cash on delivery available." : ""}${payBlock}\n\nRules: only mention products from the list above. Never invent prices.`;
 
-  return ctx.systemPrompt ? `${base}\n\nAdditional instructions:\n${ctx.systemPrompt}` : base;
+  return `${base}${orderProtocol}${advanceReminder}${ctx.systemPrompt ? `\n\nAdditional instructions:\n${ctx.systemPrompt}` : ""}`;
 }
 
 /**
@@ -207,6 +250,57 @@ export async function generateImageReply(
   }
   console.error("AI image reply failed:", lastErr);
   return fallbackReply(ctx);
+}
+
+export interface PaymentCheck {
+  looksLikePayment: boolean;
+  amount: number | null;
+  trxId: string;
+  sender: string;
+  method: string; // bkash | nagad | rocket | ""
+}
+
+/**
+ * Read a customer-sent payment screenshot (bKash/Nagad/Rocket confirmation)
+ * and extract amount / TrxID / sender number so the shop can match it
+ * against an expected advance payment.
+ */
+export async function generatePaymentCheck(
+  imageDataUri: string,
+  expectedAmount: number
+): Promise<PaymentCheck | null> {
+  const gemini = geminiClient();
+  if (!gemini) return null;
+  const parts: any[] = [
+    {
+      type: "text",
+      text: `This image may be a mobile-banking payment confirmation (bKash / Nagad / Rocket) for an advance payment of ৳${expectedAmount}. Examine it carefully. Reply with ONLY a JSON object, no other text: {"looksLikePayment": true/false, "amount": <number or null>, "trxId": "<transaction id or empty>", "sender": "<sender phone number or empty>", "method": "<bkash|nagad|rocket or empty>"}. If it is not a payment confirmation screenshot, set looksLikePayment to false.`,
+    },
+    { type: "image_url", image_url: { url: imageDataUri } },
+  ];
+  for (const model of geminiModels()) {
+    try {
+      const res = await gemini.chat.completions.create({
+        model,
+        messages: [{ role: "user", content: parts }] as any,
+        max_tokens: 300,
+      });
+      const raw = res.choices[0]?.message?.content?.trim() || "";
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (!m) continue;
+      const j = JSON.parse(m[0]);
+      return {
+        looksLikePayment: !!j.looksLikePayment,
+        amount: typeof j.amount === "number" ? j.amount : null,
+        trxId: String(j.trxId || ""),
+        sender: String(j.sender || ""),
+        method: String(j.method || ""),
+      };
+    } catch (e) {
+      console.error("payment check model failed:", model, e);
+    }
+  }
+  return null;
 }
 
 /** Used when no AI key is configured or the API fails. */
