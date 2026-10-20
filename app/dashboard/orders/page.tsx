@@ -27,6 +27,15 @@ export default function OrdersPage() {
     load();
   };
 
+  const confirmAdvance = async (id: string) => {
+    await fetch(`/api/orders/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ advanceStatus: "confirmed" }),
+    });
+    load();
+  };
+
   return (
     <div>
       <h1>অর্ডার ম্যানেজমেন্ট</h1>
@@ -44,8 +53,39 @@ export default function OrdersPage() {
               <strong>{o.customerName}</strong> · {o.customerPhone}
               <div style={{ fontSize: 13, color: "#6b7280" }}>{o.customerAddress} · {o.channel}</div>
               <div style={{ fontSize: 13, marginTop: 4 }}>
-                {o.items.map((i: any) => `${i.product.nameBn} × ${i.quantity}`).join(", ")}
+                {o.items.map((i: any) => {
+                  const nm = i.productName || i.product?.nameBn || "প্রোডাক্ট";
+                  const variant = [i.color, i.size].filter(Boolean).join(", ");
+                  return `${nm}${variant ? ` (${variant})` : ""} × ${i.quantity}`;
+                }).join(", ")}
               </div>
+              {o.advanceAmount > 0 && (
+                <div style={{ fontSize: 13, marginTop: 6 }}>
+                  {o.advanceStatus === "pending" && (
+                    <span style={{ background: "#fef9c3", color: "#854d0e", padding: "2px 8px", borderRadius: 999 }}>
+                      ⚠️ অগ্রিম বাকি: ৳{o.advanceAmount} (ডেলিভারি চার্জ)
+                    </span>
+                  )}
+                  {o.advanceStatus === "claimed" && (
+                    <span style={{ display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <span style={{ background: "#dbeafe", color: "#1e40af", padding: "2px 8px", borderRadius: 999 }}>
+                        🧾 পেমেন্ট দাবি: ৳{o.advanceAmount}
+                        {o.advanceTrxId ? ` · TrxID: ${o.advanceTrxId}` : ""}
+                        {o.advanceSender ? ` · নম্বর: ${o.advanceSender}` : ""}
+                      </span>
+                      <button onClick={() => confirmAdvance(o.id)}
+                        style={{ background: "#16a34a", color: "#fff", border: "none", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12 }}>
+                        ✅ টাকা পেয়েছি — কনফার্ম
+                      </button>
+                    </span>
+                  )}
+                  {o.advanceStatus === "confirmed" && (
+                    <span style={{ background: "#dcfce7", color: "#166534", padding: "2px 8px", borderRadius: 999 }}>
+                      ✅ অগ্রিম পাওয়া গেছে: ৳{o.advanceAmount}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontWeight: 700, fontSize: 18 }}>৳{o.total.toLocaleString()}</div>
