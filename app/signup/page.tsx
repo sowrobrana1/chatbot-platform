@@ -1,0 +1,74 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+
+export default function SignupPage() {
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      const r = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setError(d.error || "সাইন আপ ব্যর্থ হয়েছে।");
+        return;
+      }
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setError("কিছু একটা ভুল হয়েছে। আবার চেষ্টা করুন।");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const field = {
+    width: "100%",
+    padding: "12px",
+    border: "1px solid #d1d5db",
+    borderRadius: 10,
+    fontSize: 16,
+  } as React.CSSProperties;
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f0fdf4", fontFamily: "system-ui,sans-serif", padding: 16 }}>
+      <form onSubmit={submit} style={{ background: "#fff", padding: 32, borderRadius: 16, width: "100%", maxWidth: 400, boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}>
+        <div style={{ textAlign: "center", fontSize: 28, marginBottom: 8 }}>🤖</div>
+        <h1 style={{ textAlign: "center", margin: "0 0 8px" }}>সাইন আপ</h1>
+        <p style={{ textAlign: "center", color: "#6b7280", margin: "0 0 24px" }}>ফ্রি অ্যাকাউন্ট খুলুন — কার্ড লাগবে না</p>
+        {error && (
+          <div style={{ background: "#fee2e2", color: "#b91c1c", padding: 10, borderRadius: 8, marginBottom: 16, fontSize: 14 }}>{error}</div>
+        )}
+        <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>আপনার নাম</label>
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} required style={{ ...field, marginBottom: 14 }} placeholder="রহিম উদ্দিন" />
+        <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>ইমেইল</label>
+        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required style={{ ...field, marginBottom: 14 }} placeholder="you@example.com" />
+        <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>পাসওয়ার্ড</label>
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required style={{ ...field, marginBottom: 20 }} placeholder="কমপক্ষে ৬ অক্ষর" />
+        <button type="submit" disabled={busy} style={{ width: "100%", background: "#16a34a", color: "#fff", border: "none", borderRadius: 10, padding: 12, fontSize: 16, fontWeight: 700, cursor: "pointer", opacity: busy ? 0.7 : 1 }}>
+          {busy ? "অপেক্ষা করুন…" : "ফ্রি শুরু করুন →"}
+        </button>
+        <p style={{ textAlign: "center", marginTop: 16, fontSize: 14 }}>
+          অ্যাকাউন্ট আছে? <Link href="/login" style={{ color: "#16a34a", fontWeight: 600 }}>লগইন করুন</Link>
+        </p>
+        <p style={{ textAlign: "center", marginTop: 8 }}>
+          <Link href="/" style={{ color: "#6b7280", fontSize: 13 }}>← হোমে ফিরুন</Link>
+        </p>
+      </form>
+    </div>
+  );
+}
