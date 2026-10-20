@@ -116,8 +116,7 @@ export async function generateBotReply(
     return fallbackReply(ctx);
   } catch (err) {
     console.error("AI reply failed:", err);
-    // TEMP DEBUG: surface the error to /api/bot so it can be diagnosed remotely.
-    throw err;
+    return fallbackReply(ctx);
   }
 }
 
