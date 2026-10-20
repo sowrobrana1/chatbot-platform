@@ -29,6 +29,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reply });
   } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: "bot failed" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "bot failed",
+        detail: e instanceof Error ? e.message.slice(0, 500) : String(e).slice(0, 500),
+      },
+      { status: 500 }
+    );
   }
 }
