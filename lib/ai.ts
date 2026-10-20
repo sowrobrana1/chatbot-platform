@@ -120,6 +120,95 @@ export async function generateBotReply(
   }
 }
 
+export interface CatalogImage {
+  nameBn: string;
+  nameEn: string;
+  price: number;
+  stock: number;
+  imageUrl: string; // data URI (or https URL) of the product photo
+}
+
+function geminiClient() {
+  const key =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GEMINI_KEY ||
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (!key) return null;
+  return new OpenAI({
+    apiKey: key,
+    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+  });
+}
+
+function geminiModels(): string[] {
+  return [
+    process.env.GEMINI_MODEL,
+    "gemini-3-flash-preview",
+    "gemini-3.8-flash",
+    "gemini-flash-latest",
+  ].filter((m, i, a): m is string => !!m && a.indexOf(m) === i);
+}
+
+/**
+ * Reply to a customer-sent product photo/screenshot: show Gemini the catalog
+ * photos (with names/prices) followed by the customer's image, and ask it to
+ * identify the matching product and answer with its price/stock.
+ */
+export async function generateImageReply(
+  customerImageDataUri: string,
+  ctx: BotContext,
+  catalog: CatalogImage[]
+): Promise<string> {
+  const gemini = geminiClient();
+  if (!gemini) return fallbackReply(ctx);
+  const system = buildSystemPrompt(ctx);
+
+  const parts: any[] = [];
+  if (catalog.length > 0) {
+    parts.push({
+      type: "text",
+      text: "নিচে আমাদের ক্যাটালগের প্রোডাক্টগুলোর ছবি একে একে দেওয়া হলো (প্রতিটির আগে নাম ও দাম লেখা আছে)। সবশেষে কাস্টমারের পাঠানো ছবি দেওয়া হলো।",
+    });
+    catalog.slice(0, 20).forEach((p, i) => {
+      parts.push({
+        type: "text",
+        text: `ক্যাটালগ প্রোডাক্ট ${i + 1}: ${p.nameBn}${p.nameEn ? ` (${p.nameEn})` : ""} — দাম ৳${p.price}, স্টক ${p.stock}`,
+      });
+      parts.push({ type: "image_url", image_url: { url: p.imageUrl } });
+    });
+  }
+  parts.push({ type: "text", text: "কাস্টমারের পাঠানো ছবি:" });
+  parts.push({ type: "image_url", image_url: { url: customerImageDataUri } });
+  parts.push({
+    type: "text",
+    text:
+      ctx.language === "bn"
+        ? "কাস্টমারের ছবির প্রোডাক্টটি ক্যাটালগের কোনটির সাথে মেলে তা শনাক্ত করো। মিললে বাংলায় বলো এটি কোন প্রোডাক্ট, দাম কত, স্টক আছে কিনা, এবং অর্ডার করতে চান কিনা জিজ্ঞেস করো। কোনো ক্যাটালগ প্রোডাক্টের সাথে না মিললে ভদ্রভাবে বলো যে ছবির প্রোডাক্টটি আমাদের বর্তমান তালিকায় পাওয়া যাচ্ছে না, এবং তিনি কী খুঁজছেন লিখে জানাতে বলো। দাম কখনো বানিয়ে বলবে না।"
+        : "Identify which catalog product matches the customer's photo. If matched, reply with the product name, price and stock, and ask if they want to order. If nothing matches, politely say the product is not in the current catalog and ask what they are looking for. Never invent prices.",
+  });
+
+  let lastErr: unknown = null;
+  for (const model of geminiModels()) {
+    try {
+      const res = await gemini.chat.completions.create({
+        model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: parts },
+        ] as any,
+        max_tokens: 800,
+      });
+      const text = res.choices[0]?.message?.content?.trim();
+      if (text) return text;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  console.error("AI image reply failed:", lastErr);
+  return fallbackReply(ctx);
+}
+
 /** Used when no AI key is configured or the API fails. */
 export function fallbackReply(ctx: BotContext): string {
   if (ctx.language === "bn") {
