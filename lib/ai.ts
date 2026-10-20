@@ -56,8 +56,9 @@ function buildSystemPrompt(ctx: BotContext): string {
 
   const orderProtocol =
     ctx.language === "bn"
-      ? `\n\nঅর্ডার নেওয়ার নিয়ম:\n১) কাস্টমার অর্ডার করতে চাইলে একে একে জিজ্ঞেস করো: প্রোডাক্ট, কালার (তালিকার কালার থেকে), সাইজ (তালিকার সাইজ থেকে), কয় পিস, তারপর নাম, মোবাইল নম্বর, পুরো ঠিকানা (জেলা/এলাকাসহ)।\n২) সব তথ্য পেলে অর্ডারের সারসংক্ষেপ (প্রোডাক্ট, কালার, সাইজ, পিস, মোট দাম + ডেলিভারি চার্জ) দেখিয়ে কনফার্ম করো এবং উত্তরের একদম শেষে হুবহু এই ফরম্যাটে একটি গোপন লাইন যোগ করো (কাস্টমারকে এই লাইনের কথা বলবে না):\n[[ORDER|product=প্রোডাক্টের নাম|color=কালার|size=সাইজ|qty=সংখ্যা|name=নাম|phone=ফোন|address=ঠিকানা]]\n৩) প্রোডাক্টে "ডেলিভারি ফ্রি" থাকলে ডেলিভারি চার্জ ৳০ ধরবে এবং অফারটি আনন্দের সাথে জানাবে।\n৪) প্রোডাক্টে "ডেলিভারি চার্জ অগ্রিম" থাকলে অর্ডারের পর কাস্টমারকে বলবে: ডেলিভারি চার্জ ৳<পরিমাণ> নিচের নম্বরে বিকাশ/নগদ/রকেটে পাঠিয়ে লেনদেনের TrxID নম্বরটি বা পেমেন্টের স্ক্রিনশটটি পাঠাতে। টাকা পাঠানো ছাড়া অর্ডারটি প্রসেস হবে না — এটি ভদ্রভাবে জানাবে।\n৫) কাস্টমার টাকা পাঠিয়েছি বললে বা TrxID দিলে ধন্যবাদ জানাবে এবং উত্তরের শেষে গোপন লাইন যোগ করবে:\n[[PAID|trx=TrxID|sender=যে নম্বর থেকে পাঠিয়েছে]]`
-      : `\n\nOrder rules: collect product, color, size, quantity, then name, phone, full address. When complete, show a summary and append exactly one hidden line at the very end:\n[[ORDER|product=<name>|color=<color>|size=<size>|qty=<n>|name=<name>|phone=<phone>|address=<address>]]\nFree-delivery products have ৳0 delivery — say so happily. For advance-delivery-charge products, ask the customer to send the delivery charge to the payment number below and share the TrxID or a payment screenshot. If the customer says they paid or shares a TrxID, thank them and append: [[PAID|trx=<id>|sender=<number>]]`;
+      ? `\n\nঅর্ডার নেওয়ার নিয়ম:\n১) কাস্টমার অর্ডার করতে চাইলে একে একে জিজ্ঞেস করো: প্রোডাক্ট, কালার (তালিকার কালার থেকে), সাইজ (তালিকার সাইজ থেকে), কয় পিস, তারপর নাম, মোবাইল নম্বর, পুরো ঠিকানা (জেলা/এলাকাসহ)।\n২) সব তথ্য পেলে অর্ডারের সারসংক্ষেপ (প্রোডাক্ট, কালার, সাইজ, পিস, মোট দাম + ডেলিভারি চার্জ) দেখিয়ে কনফার্ম করো এবং উত্তরের একদম শেষে হুবহু এই ফরম্যাটে একটি গোপন লাইন যোগ করো (কাস্টমারকে এই লাইনের কথা বলবে না):\n[[ORDER|product=প্রোডাক্টের নাম|color=কালার|size=সাইজ|qty=সংখ্যা|name=নাম|phone=ফোন|address=ঠিকানা]]\n৩) প্রোডাক্টে "ডেলিভারি ফ্রি" থাকলে ডেলিভারি চার্জ ৳০ ধরবে এবং অফারটি আনন্দের সাথে জানাবে।\n৪) প্রোডাক্টে "ডেলিভারি চার্জ অগ্রিম" থাকলে অর্ডারের পর কাস্টমারকে বলবে: ডেলিভারি চার্জ ৳<পরিমাণ> নিচের নম্বরে বিকাশ/নগদ/রকেটে পাঠিয়ে লেনদেনের TrxID নম্বরটি বা পেমেন্টের স্ক্রিনশটটি পাঠাতে। টাকা পাঠানো ছাড়া অর্ডারটি প্রসেস হবে না — এটি ভদ্রভাবে জানাবে।\n৫) কাস্টমার টাকা পাঠিয়েছি বললে বা TrxID দিলে ধন্যবাদ জানাবে এবং উত্তরের শেষে গোপন লাইন যোগ করবে:\n[[PAID|trx=TrxID|sender=যে নম্বর থেকে পাঠিয়েছে]]
+৬) সবচেয়ে গুরুত্বপূর্ণ: গোপন ORDER লাইন ছাড়া অর্ডার সিস্টেমে সেভ হয় না। যেকোনো উত্তরে তুমি অর্ডার "কনফার্ম হয়েছে" বললেই সেই উত্তরের শেষে ORDER লাইনটি অবশ্যই আবার যোগ করবে — আগের উত্তরে যোগ করে থাকলেও।`
+      : `\n\nOrder rules: collect product, color, size, quantity, then name, phone, full address. When complete, show a summary and append exactly one hidden line at the very end:\n[[ORDER|product=<name>|color=<color>|size=<size>|qty=<n>|name=<name>|phone=<phone>|address=<address>]]\nFree-delivery products have ৳0 delivery — say so happily. For advance-delivery-charge products, ask the customer to send the delivery charge to the payment number below and share the TrxID or a payment screenshot. If the customer says they paid or shares a TrxID, thank them and append: [[PAID|trx=<id>|sender=<number>]] CRITICAL: without the hidden ORDER line the order is NOT saved — any reply that says the order is confirmed MUST end with the ORDER line again, even if you added it before.`;
 
   const advanceReminder = ctx.pendingAdvance
     ? ctx.language === "bn"
@@ -298,6 +299,59 @@ export async function generatePaymentCheck(
       };
     } catch (e) {
       console.error("payment check model failed:", model, e);
+    }
+  }
+  return null;
+}
+
+export interface ExtractedOrder {
+  product: string;
+  color: string;
+  size: string;
+  qty: number;
+  name: string;
+  phone: string;
+  address: string;
+}
+
+/**
+ * Recovery extraction: if the chat model confirmed an order in prose but
+ * forgot the hidden ORDER marker, read the recent conversation and pull the
+ * order fields out as strict JSON. Returns null unless a complete order
+ * (name + phone + address) is present.
+ */
+export async function extractOrderFromConversation(
+  transcript: { role: "user" | "assistant"; content: string }[]
+): Promise<ExtractedOrder | null> {
+  const gemini = geminiClient();
+  if (!gemini) return null;
+  const convo = transcript
+    .map((m) => `${m.role === "user" ? "CUSTOMER" : "BOT"}: ${m.content}`)
+    .join("\n");
+  const prompt = `Below is a shop chat conversation (Bengali/English mix). The customer may have placed an order. Extract the order details. Reply with ONLY a JSON object, no other text: {"found": true/false, "product": "<product name as the customer/bot referred to it>", "color": "<color or empty>", "size": "<size or empty>", "qty": <number, default 1>, "name": "<customer name>", "phone": "<customer phone number>", "address": "<full delivery address>"}. Set found=true ONLY if the customer actually ordered AND name, phone and address are all present in the conversation. Otherwise found=false.\n\nCONVERSATION:\n${convo}`;
+  for (const model of geminiModels()) {
+    try {
+      const res = await gemini.chat.completions.create({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 400,
+      });
+      const raw = res.choices[0]?.message?.content?.trim() || "";
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (!m) continue;
+      const j = JSON.parse(m[0]);
+      if (!j.found || !j.phone || !j.name) continue;
+      return {
+        product: String(j.product || ""),
+        color: String(j.color || ""),
+        size: String(j.size || ""),
+        qty: Math.max(1, parseInt(String(j.qty || "1"), 10) || 1),
+        name: String(j.name || ""),
+        phone: String(j.phone || ""),
+        address: String(j.address || ""),
+      };
+    } catch (e) {
+      console.error("order extraction model failed:", model, e);
     }
   }
   return null;
