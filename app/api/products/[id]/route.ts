@@ -26,6 +26,18 @@ export async function PATCH(
       ...(data.stock !== undefined ? { stock: Number(data.stock) } : {}),
       ...(data.sku !== undefined ? { sku: data.sku } : {}),
       ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl } : {}),
+      ...(data.images !== undefined
+        ? {
+            images: Array.isArray(data.images) ? JSON.stringify(data.images) : "",
+            ...(Array.isArray(data.images) && data.images[0]?.url
+              ? { imageUrl: data.images[0].url }
+              : {}),
+          }
+        : {}),
+      ...(data.colors !== undefined ? { colors: data.colors } : {}),
+      ...(data.sizes !== undefined ? { sizes: data.sizes } : {}),
+      ...(data.freeDelivery !== undefined ? { freeDelivery: !!data.freeDelivery } : {}),
+      ...(data.deliveryAdvance !== undefined ? { deliveryAdvance: !!data.deliveryAdvance } : {}),
       ...(data.active !== undefined ? { active: data.active } : {}),
     },
   });
