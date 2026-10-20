@@ -4,6 +4,7 @@ import {
   generateBotReply,
   generateImageReply,
   generatePaymentCheck,
+  extractOrderFromConversation,
   BotContext,
   CatalogImage,
 } from "@/lib/ai";
@@ -75,6 +76,108 @@ function parseMarker(reply: string, tag: string): { data: Record<string, string>
     if (idx > 0) data[part.slice(0, idx).trim().toLowerCase()] = part.slice(idx + 1).trim();
   }
   return { data, clean: reply.replace(re, "").trim() };
+}
+
+interface OrderData {
+  product?: string;
+  color?: string;
+  size?: string;
+  qty?: string | number;
+  name?: string;
+  phone?: string;
+  address?: string;
+}
+
+/**
+ * Create a real Order row from extracted/marker order data.
+ * Product resolution is deliberately forgiving: exact/includes name match,
+ * then color-name match, then — if the shop has exactly ONE active product —
+ * that product. Dedupes against an identical order from the same sender in
+ * the last 60 minutes (Facebook redelivers webhook events).
+ * Returns true when an order exists (created now or already present).
+ */
+async function tryCreateOrder(
+  userId: string,
+  senderId: string,
+  ctx: BotContext,
+  d: OrderData
+): Promise<boolean> {
+  try {
+    const phone = (d.phone || "").replace(/[\s-]/g, "");
+    if (!phone) return false;
+    const since = new Date(Date.now() - 60 * 60 * 1000);
+    const dup = await prisma.order.findFirst({
+      where: { userId, senderId, customerPhone: phone, createdAt: { gt: since } },
+    });
+    if (dup) return true;
+
+    const all = await prisma.product.findMany({ where: { userId, active: true } });
+    const want = (d.product || "").trim().toLowerCase();
+    let product =
+      all.find(
+        (p: any) =>
+          p.nameBn.trim().toLowerCase() === want || p.nameEn.trim().toLowerCase() === want
+      ) ||
+      all.find(
+        (p: any) =>
+          want &&
+          (p.nameBn.toLowerCase().includes(want) || want.includes(p.nameBn.trim().toLowerCase()))
+      ) ||
+      all.find((p: any) => {
+        const cols = (p.colors || "")
+          .split(",")
+          .map((c: string) => c.trim().toLowerCase())
+          .filter(Boolean);
+        return want && cols.includes(want);
+      });
+    if (!product && all.length === 1) product = all[0];
+    if (!product) {
+      console.error("Order not created: product unresolved", { want, d });
+      return false;
+    }
+    const qty = Math.max(1, parseInt(String(d.qty || "1"), 10) || 1);
+    const address = d.address || "";
+    const inDhaka = /ঢাকা|dhaka/i.test(address);
+    const delivery = product.freeDelivery
+      ? 0
+      : inDhaka
+        ? ctx.deliveryInsideDhaka
+        : ctx.deliveryOutsideDhaka;
+    const needsAdvance = product.deliveryAdvance && delivery > 0;
+    await prisma.order.create({
+      data: {
+        userId,
+        customerName: d.name || "Messenger Customer",
+        customerPhone: phone,
+        customerAddress: address,
+        channel: "facebook",
+        senderId,
+        status: "pending",
+        subtotal: product.price * qty,
+        deliveryCharge: delivery,
+        total: product.price * qty + delivery,
+        advanceAmount: needsAdvance ? delivery : 0,
+        advanceStatus: needsAdvance ? "pending" : "none",
+        notes: `কালার: ${d.color || "-"}, সাইজ: ${d.size || "-"}`,
+        items: {
+          create: [
+            {
+              productId: product.id,
+              productName: product.nameBn,
+              color: d.color || "",
+              size: d.size || "",
+              quantity: qty,
+              price: product.price,
+            },
+          ],
+        },
+      },
+    });
+    return true;
+  } catch (e) {
+    console.error("tryCreateOrder failed:", e);
+    return false;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -246,57 +349,39 @@ export async function POST(req: NextRequest) {
 
         // Bot completed an order (ORDER marker) -> save it for real
         const ord = parseMarker(reply, "ORDER");
+        let orderSaved = false;
         if (ord.data) {
           reply = ord.clean;
+          orderSaved = await tryCreateOrder(userId, senderId, ctx, ord.data);
+        }
+
+        // Recovery sweep: the bot confirmed an order in prose but forgot the
+        // marker (happens in follow-up turns). If this reply sounds like an
+        // order confirmation and the conversation contains a phone number,
+        // extract the order from the transcript and save it for real.
+        if (
+          !orderSaved &&
+          /কনফার্ম|অর্ডারটি গৃহীত|অর্ডার কনফার্ম|order (is )?confirmed/i.test(reply)
+        ) {
           try {
-            const d = ord.data;
-            const all = await prisma.product.findMany({ where: { userId, active: true } });
-            const want = (d.product || "").trim().toLowerCase();
-            const product =
-              all.find((p: any) => p.nameBn.trim().toLowerCase() === want || p.nameEn.trim().toLowerCase() === want) ||
-              all.find((p: any) => p.nameBn.toLowerCase().includes(want) || want.includes(p.nameBn.trim().toLowerCase()));
-            if (product) {
-              const qty = Math.max(1, parseInt(d.qty || "1", 10) || 1);
-              const address = d.address || "";
-              const inDhaka = /ঢাকা|dhaka/i.test(address);
-              const delivery = product.freeDelivery
-                ? 0
-                : inDhaka
-                  ? ctx.deliveryInsideDhaka
-                  : ctx.deliveryOutsideDhaka;
-              const needsAdvance = product.deliveryAdvance && delivery > 0;
-              await prisma.order.create({
-                data: {
-                  userId,
-                  customerName: d.name || "Messenger Customer",
-                  customerPhone: d.phone || "",
-                  customerAddress: address,
-                  channel: "facebook",
-                  senderId,
-                  status: "pending",
-                  subtotal: product.price * qty,
-                  deliveryCharge: delivery,
-                  total: product.price * qty + delivery,
-                  advanceAmount: needsAdvance ? delivery : 0,
-                  advanceStatus: needsAdvance ? "pending" : "none",
-                  notes: `কালার: ${d.color || "-"}, সাইজ: ${d.size || "-"}`,
-                  items: {
-                    create: [
-                      {
-                        productId: product.id,
-                        productName: product.nameBn,
-                        color: d.color || "",
-                        size: d.size || "",
-                        quantity: qty,
-                        price: product.price,
-                      },
-                    ],
-                  },
-                },
-              });
+            // NOTE: history was already reversed to chronological order above.
+            const transcript = [
+              ...history.map((m) => ({
+                role: m.role === "bot" ? ("assistant" as const) : ("user" as const),
+                content: m.text,
+              })),
+              { role: "user" as const, content: text as string },
+              { role: "assistant" as const, content: reply },
+            ];
+            const hasPhone = transcript.some((m) => /01\d{9}/.test(m.content.replace(/[\s-]/g, "")));
+            if (hasPhone) {
+              const extracted = await extractOrderFromConversation(transcript);
+              if (extracted) {
+                await tryCreateOrder(userId, senderId, ctx, extracted);
+              }
             }
           } catch (e) {
-            console.error("Order creation from marker failed:", e);
+            console.error("Order recovery sweep failed:", e);
           }
         }
       }
