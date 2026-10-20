@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 
 export const dynamic = 'force-dynamic';
 
-const DEMO_USER_ID = "demo-user";
-
 export async function GET() {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const [orders, products, messages, conversations] = await Promise.all([
-    prisma.order.findMany({ where: { userId: DEMO_USER_ID } }),
-    prisma.product.findMany({ where: { userId: DEMO_USER_ID } }),
+    prisma.order.findMany({ where: { userId: user.id } }),
+    prisma.product.findMany({ where: { userId: user.id } }),
     prisma.message.count({
-      where: { conversation: { userId: DEMO_USER_ID } },
+      where: { conversation: { userId: user.id } },
     }),
-    prisma.conversation.count({ where: { userId: DEMO_USER_ID } }),
+    prisma.conversation.count({ where: { userId: user.id } }),
   ]);
 
   const revenue = orders
