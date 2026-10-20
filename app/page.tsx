@@ -128,7 +128,8 @@ export default function LandingPage() {
             style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "6px 12px", background: "#fff", cursor: "pointer" }}>
             {lang === "bn" ? "English" : "বাংলা"}
           </button>
-          <a href="/dashboard" style={{ background: "#16a34a", color: "#fff", padding: "8px 16px", borderRadius: 8, textDecoration: "none" }}>{S.cta1}</a>
+          <a href="/login" style={{ border: "1px solid #d1d5db", padding: "8px 16px", borderRadius: 8, textDecoration: "none", color: "#111827" }}>{lang === "bn" ? "লগইন" : "Login"}</a>
+          <a href="/signup" style={{ background: "#16a34a", color: "#fff", padding: "8px 16px", borderRadius: 8, textDecoration: "none" }}>{S.cta1}</a>
         </div>
       </header>
 
@@ -137,7 +138,7 @@ export default function LandingPage() {
         <h1 style={{ fontSize: 40, margin: "0 0 16px" }}>{S.title}</h1>
         <p style={{ fontSize: 18, color: "#4b5563", maxWidth: 640, margin: "0 auto 24px" }}>{S.sub}</p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-          <a href="/dashboard" style={{ background: "#16a34a", color: "#fff", padding: "12px 24px", borderRadius: 10, textDecoration: "none", fontWeight: 600 }}>{S.cta1}</a>
+          <a href="/signup" style={{ background: "#16a34a", color: "#fff", padding: "12px 24px", borderRadius: 10, textDecoration: "none", fontWeight: 600 }}>{S.cta1}</a>
           <a href="#demo" style={{ border: "1px solid #d1d5db", padding: "12px 24px", borderRadius: 10, textDecoration: "none", color: "#111827" }}>{S.liveDemo}</a>
         </div>
       </section>
@@ -191,7 +192,7 @@ export default function LandingPage() {
             <div key={n as string} style={{ border: hot ? "2px solid #16a34a" : "1px solid #e5e7eb", borderRadius: 12, padding: 24, textAlign: "center" }}>
               <h3>{n}</h3>
               <div style={{ fontSize: 28, fontWeight: 700, margin: "8px 0" }}>{p}</div>
-              <a href="/dashboard" style={{ display: "inline-block", background: "#16a34a", color: "#fff", padding: "10px 20px", borderRadius: 8, textDecoration: "none" }}>{S.cta1}</a>
+              <a href="/signup" style={{ display: "inline-block", background: "#16a34a", color: "#fff", padding: "10px 20px", borderRadius: 8, textDecoration: "none" }}>{S.cta1}</a>
             </div>
           ))}
         </div>
