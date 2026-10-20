@@ -20,7 +20,14 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const data = await req.json();
-  // Product photos are stored as compressed data URIs in imageUrl; cap the size.
+  // Product photos are stored as compressed data URIs; cap sizes.
+  const imagesJson = Array.isArray(data.images) ? JSON.stringify(data.images) : "";
+  if (imagesJson.length > 3000000) {
+    return NextResponse.json(
+      { error: "ছবি অনেক বেশি বড় হয়ে গেছে। কম ছবি/ছোট ছবি দিন।" },
+      { status: 413 }
+    );
+  }
   if (typeof data.imageUrl === "string" && data.imageUrl.length > 900000) {
     return NextResponse.json(
       { error: "ছবিটি খুব বড়। ছোট/কম রেজোলিউশনের ছবি দিন।" },
@@ -38,6 +45,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const firstImage = Array.isArray(data.images) && data.images[0]?.url ? data.images[0].url : (data.imageUrl || "");
   const product = await prisma.product.create({
     data: {
       userId: user.id,
@@ -46,7 +54,12 @@ export async function POST(req: NextRequest) {
       price: Number(data.price) || 0,
       stock: Number(data.stock) || 0,
       sku: data.sku || "",
-      imageUrl: data.imageUrl || "",
+      imageUrl: firstImage,
+      images: imagesJson,
+      colors: data.colors || "",
+      sizes: data.sizes || "",
+      freeDelivery: !!data.freeDelivery,
+      deliveryAdvance: !!data.deliveryAdvance,
     },
   });
   return NextResponse.json(product, { status: 201 });
