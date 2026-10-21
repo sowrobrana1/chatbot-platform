@@ -464,7 +464,7 @@ export async function translateImageText(imageDataUri: string): Promise<string> 
   const keys = geminiKeys();
   if (!keys.length) return TRANSLATE_FALLBACK;
   const instruction =
-    "Read ALL the text in this image. If the text is in Bangla (Bangla script or Romanized Bangla), output ONLY its English translation. If it is in English, output ONLY its Bangla translation (Bangla script). If the image has no readable text, output exactly: ছবিতে কোনো লেখা পাওয়া যায়নি / No text found in the image. Never explain or add anything else.";
+    "Read the main text content of this image, ignoring chat-app UI elements such as timestamps, sender names, page names, buttons and status bars. Choose ONE target language for the whole image: if the content is mostly Bangla (Bangla script or Romanized Bangla), translate everything into English; if it is mostly English, translate everything into Bangla (Bangla script). If the image shows the same content in both languages (a bilingual notice), output the translation only ONCE in the target language — never output both versions. Output ONLY the final translated text, nothing else. If the image has no readable text, output exactly: ছবিতে কোনো লেখা পাওয়া যায়নি / No text found in the image.";
   let lastErr: unknown = null;
   for (const { key, index } of orderedKeys(keys)) {
     const gemini = geminiClientFor(key);
