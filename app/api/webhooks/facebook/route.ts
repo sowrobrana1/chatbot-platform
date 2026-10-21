@@ -211,6 +211,24 @@ export async function POST(req: NextRequest) {
       if (!settings) continue;
       const userId = settings.userId;
 
+      // Translator pages: start downloading a sent image NOW so the download
+      // overlaps the conversation bookkeeping below instead of adding to the
+      // reply latency later.
+      const translatorImagePromise: Promise<string | null> | null =
+        (settings as any).botMode === "translator" && imageUrl
+          ? fetch(imageUrl)
+              .then(async (r) => {
+                if (!r.ok) throw new Error(`image fetch ${r.status}`);
+                const mime = r.headers.get("content-type") || "image/jpeg";
+                const buf = Buffer.from(await r.arrayBuffer());
+                return `data:${mime};base64,${buf.toString("base64")}`;
+              })
+              .catch((e) => {
+                console.error("Translator image prefetch failed:", e);
+                return null;
+              })
+          : null;
+
       // Save conversation
       let convo = await prisma.conversation.findFirst({
         where: { userId, channel: "facebook", senderId },
@@ -249,18 +267,12 @@ export async function POST(req: NextRequest) {
       if ((settings as any).botMode === "translator") {
         let tReply: string;
         if (imageUrl) {
-          try {
-            const imgRes = await fetch(imageUrl);
-            if (!imgRes.ok) throw new Error(`image fetch ${imgRes.status}`);
-            const mime = imgRes.headers.get("content-type") || "image/jpeg";
-            const buf = Buffer.from(await imgRes.arrayBuffer());
-            tReply = await translateImageText(
-              `data:${mime};base64,${buf.toString("base64")}`
-            );
-          } catch (e) {
-            console.error("Translator image handling failed:", e);
-            tReply = "দুঃখিত, ছবিটি পড়া যায়নি / Sorry, the image could not be read";
-          }
+          const dataUri = translatorImagePromise
+            ? await translatorImagePromise
+            : null;
+          tReply = dataUri
+            ? await translateImageText(dataUri)
+            : "দুঃখিত, ছবিটি পড়া যায়নি / Sorry, the image could not be read";
         } else {
           let target: "en" | "bn" | "auto" = "auto";
           let bodyText = (text || "").trim();
