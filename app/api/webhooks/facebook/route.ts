@@ -229,9 +229,17 @@ export async function POST(req: NextRequest) {
               })
           : null;
 
-      // Save conversation
-      let convo = await prisma.conversation.findFirst({
+      // Save conversation — fetch it together with the sender's latest user
+      // message so the duplicate check below costs no extra DB round-trip.
+      let convo: any = await prisma.conversation.findFirst({
         where: { userId, channel: "facebook", senderId },
+        include: {
+          messages: {
+            where: { role: "user" },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
       });
       if (!convo) {
         convo = await prisma.conversation.create({
@@ -242,10 +250,7 @@ export async function POST(req: NextRequest) {
       // an identical text from this sender within 3 minutes is a duplicate —
       // skip it so the customer never gets two contradictory replies.
       if (text) {
-        const lastUserMsg = await prisma.message.findFirst({
-          where: { conversationId: convo.id, role: "user" },
-          orderBy: { createdAt: "desc" },
-        });
+        const lastUserMsg = convo.messages?.[0];
         if (
           lastUserMsg &&
           lastUserMsg.text === text &&
