@@ -255,13 +255,16 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      await prisma.message.create({
-        data: {
-          conversationId: convo.id,
-          role: "user",
-          text: text || "[কাস্টমার একটি ছবি পাঠিয়েছেন]",
-        },
-      });
+      const isTranslator = (settings as any).botMode === "translator";
+      if (!isTranslator) {
+        await prisma.message.create({
+          data: {
+            conversationId: convo.id,
+            role: "user",
+            text: text || "[কাস্টমার একটি ছবি পাঠিয়েছেন]",
+          },
+        });
+      }
 
       // --- Translator mode (e.g. BD Translator page): ONLY translate ---
       if ((settings as any).botMode === "translator") {
@@ -285,14 +288,23 @@ export async function POST(req: NextRequest) {
             ? await translateText(bodyText, target)
             : "অনুবাদ করতে লেখাটা পাঠান / Send the text to translate";
         }
-        await prisma.message.create({
-          data: { conversationId: convo.id, role: "bot", text: tReply },
-        });
         try {
           await sendFacebookMessage(settings.fbPageToken, senderId, tReply);
         } catch (e) {
           console.error("FB send error:", e);
         }
+        // Bookkeeping AFTER the reply is out — the customer should not wait
+        // on database writes (translator fast path).
+        await prisma.message.create({
+          data: {
+            conversationId: convo.id,
+            role: "user",
+            text: text || "[কাস্টমার একটি ছবি পাঠিয়েছেন]",
+          },
+        });
+        await prisma.message.create({
+          data: { conversationId: convo.id, role: "bot", text: tReply },
+        });
         continue;
       }
 
