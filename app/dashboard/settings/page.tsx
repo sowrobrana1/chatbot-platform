@@ -142,6 +142,17 @@ export default function SettingsPage() {
       </>)}
 
       {section("📘 Facebook Messenger", <>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>বটের ধরন</label>
+          <select value={s.botMode || "shop"} onChange={(e) => setS({ ...s, botMode: e.target.value })}
+            style={{ padding: 8, borderRadius: 8, border: "1px solid #d1d5db" }}>
+            <option value="shop">🛍️ শপ বট (অর্ডার নেবে)</option>
+            <option value="translator">🌐 Translator (শুধু অনুবাদ করবে)</option>
+          </select>
+          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+            Translator মোডে বট শুধু বাংলা ⇄ English অনুবাদ করবে, অন্য কোনো উত্তর দেবে না (BD Translator পেজের জন্য)।
+          </div>
+        </div>
         {field("fbPageId", "Page ID")}
         {field("fbPageToken", "Page Access Token (খালি রাখলে আগেরটা থাকবে)")}
         <label><input type="checkbox" checked={!!s.fbConnected} onChange={(e) => setS({ ...s, fbConnected: e.target.checked })} /> সংযুক্ত</label>
