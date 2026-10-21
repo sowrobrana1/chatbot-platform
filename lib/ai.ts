@@ -365,3 +365,93 @@ export function fallbackReply(ctx: BotContext): string {
   }
   return "Sorry, I can't reply right now. Our team will contact you soon.";
 }
+
+// ---------------------------------------------------------------------------
+// Translator mode (BD Translator page): the bot ONLY translates.
+// Bangla (script or Romanized) -> English, English -> Bangla. A leading
+// "en:" / "bn:" command forces the direction. Image messages: read the text
+// in the image and return only its translation. No chat, no extra words.
+// ---------------------------------------------------------------------------
+
+export type TranslateTarget = "en" | "bn" | "auto";
+
+const TRANSLATOR_SYSTEM = `You are a translation engine for the "BD Translator" Facebook page. You ONLY translate — never chat, never explain, never add greetings, quotes, notes or quotation marks.
+
+Rules:
+- If the target is English: translate the user's text into natural English.
+- If the target is Bangla: translate the user's text into natural Bangla (Bangla script).
+- If the target is Auto: if the text is English, translate to Bangla; if it is Bangla (Bangla script OR Romanized Bangla/Banglish), translate to English.
+- Keep names, numbers, prices and formatting (line breaks, lists) as they are.
+- Output ONLY the translated text.`;
+
+const TRANSLATE_FALLBACK = "দুঃখিত, আবার চেষ্টা করুন / Sorry, please try again";
+
+export async function translateText(
+  text: string,
+  target: TranslateTarget = "auto"
+): Promise<string> {
+  const keys = geminiKeys();
+  if (!keys.length) return TRANSLATE_FALLBACK;
+  const targetLine =
+    target === "en"
+      ? "Target: English."
+      : target === "bn"
+        ? "Target: Bangla."
+        : "Target: Auto (English<->Bangla by input language).";
+  let lastErr: unknown = null;
+  for (const key of keys) {
+    const gemini = geminiClientFor(key);
+    for (const model of geminiModels()) {
+      try {
+        const res = await gemini.chat.completions.create({
+          model,
+          messages: [
+            { role: "system", content: TRANSLATOR_SYSTEM },
+            { role: "user", content: `${targetLine}\n\n${text}` },
+          ],
+          max_tokens: 2000,
+        });
+        const out = res.choices[0]?.message?.content?.trim();
+        if (out) return out;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+  }
+  console.error("translateText failed:", lastErr);
+  return TRANSLATE_FALLBACK;
+}
+
+export async function translateImageText(imageDataUri: string): Promise<string> {
+  const keys = geminiKeys();
+  if (!keys.length) return TRANSLATE_FALLBACK;
+  const instruction =
+    "Read ALL the text in this image. If the text is in Bangla (Bangla script or Romanized Bangla), output ONLY its English translation. If it is in English, output ONLY its Bangla translation (Bangla script). If the image has no readable text, output exactly: ছবিতে কোনো লেখা পাওয়া যায়নি / No text found in the image. Never explain or add anything else.";
+  let lastErr: unknown = null;
+  for (const key of keys) {
+    const gemini = geminiClientFor(key);
+    for (const model of geminiModels()) {
+      try {
+        const res = await gemini.chat.completions.create({
+          model,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: instruction },
+                { type: "image_url", image_url: { url: imageDataUri } },
+              ],
+            },
+          ] as any,
+          max_tokens: 2000,
+        });
+        const out = res.choices[0]?.message?.content?.trim();
+        if (out) return out;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+  }
+  console.error("translateImageText failed:", lastErr);
+  return TRANSLATE_FALLBACK;
+}
