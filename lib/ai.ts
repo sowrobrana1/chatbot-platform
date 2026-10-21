@@ -407,6 +407,19 @@ function isQuotaError(e: unknown): boolean {
   return status === 429 || /429|quota|resource_exhausted|rate limit/i.test(msg);
 }
 
+// Quota-dead OR invalid/unauthorized key: retrying other models on the same
+// key only burns seconds — skip straight to the next key.
+function isDeadKeyError(e: unknown): boolean {
+  if (isQuotaError(e)) return true;
+  const status = (e as { status?: number } | null)?.status;
+  const msg = String((e as { message?: string } | null)?.message || e || "");
+  return (
+    status === 401 ||
+    status === 403 ||
+    /api key not valid|invalid api key|api_key_invalid/i.test(msg)
+  );
+}
+
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   let t: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -442,7 +455,11 @@ export async function translateText(
               { role: "user", content: `${targetLine}\n\n${text}` },
             ],
             max_tokens: 2000,
-          }),
+            // Translation needs no reasoning — thinking OFF keeps replies fast.
+            extra_body: {
+              google: { thinking_config: { thinking_budget: 0 } },
+            },
+          } as any),
           7000
         );
         const out = res.choices[0]?.message?.content?.trim();
@@ -452,7 +469,7 @@ export async function translateText(
         }
       } catch (e) {
         lastErr = e;
-        if (isQuotaError(e)) break; // dead key — jump to the next key at once
+        if (isDeadKeyError(e)) break; // dead key — jump to the next key at once
       }
     }
   }
@@ -483,7 +500,11 @@ export async function translateImageText(imageDataUri: string): Promise<string> 
               },
             ] as any,
             max_tokens: 2000,
-          }),
+            // No reasoning needed for OCR+translate — thinking OFF for speed.
+            extra_body: {
+              google: { thinking_config: { thinking_budget: 0 } },
+            },
+          } as any),
           15000
         );
         const out = res.choices[0]?.message?.content?.trim();
@@ -493,7 +514,7 @@ export async function translateImageText(imageDataUri: string): Promise<string> 
         }
       } catch (e) {
         lastErr = e;
-        if (isQuotaError(e)) break; // dead key — jump to the next key at once
+        if (isDeadKeyError(e)) break; // dead key — jump to the next key at once
       }
     }
   }
