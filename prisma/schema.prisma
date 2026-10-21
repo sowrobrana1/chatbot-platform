@@ -37,6 +37,7 @@ model Settings {
   systemPrompt  String  @default("") @db.Text
   botLanguage   String  @default("bn") // bn | en
   botTone       String  @default("friendly")
+  botMode       String  @default("shop") // shop | translator
   // Delivery
   deliveryInsideDhaka  Int @default(60)
   deliveryOutsideDhaka Int @default(120)
