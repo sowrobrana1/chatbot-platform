@@ -386,6 +386,37 @@ Rules:
 
 const TRANSLATE_FALLBACK = "দুঃখিত, আবার চেষ্টা করুন / Sorry, please try again";
 
+// Latency helpers for the translator: remember which key worked last (on a
+// warm instance) and try it first; abandon a quota-dead key immediately
+// instead of burning time on every model with that key; cap each attempt so
+// a hanging request fails over fast.
+let lastGoodKeyIndex = 0;
+
+function orderedKeys(keys: string[]): { key: string; index: number }[] {
+  const out: { key: string; index: number }[] = [];
+  for (let n = 0; n < keys.length; n++) {
+    const index = (lastGoodKeyIndex + n) % keys.length;
+    out.push({ key: keys[index], index });
+  }
+  return out;
+}
+
+function isQuotaError(e: unknown): boolean {
+  const status = (e as { status?: number } | null)?.status;
+  const msg = String((e as { message?: string } | null)?.message || e || "");
+  return status === 429 || /429|quota|resource_exhausted|rate limit/i.test(msg);
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    t = setTimeout(() => reject(new Error("gemini attempt timeout")), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => {
+    if (t) clearTimeout(t);
+  });
+}
+
 export async function translateText(
   text: string,
   target: TranslateTarget = "auto"
@@ -399,22 +430,29 @@ export async function translateText(
         ? "Target: Bangla."
         : "Target: Auto (English<->Bangla by input language).";
   let lastErr: unknown = null;
-  for (const key of keys) {
+  for (const { key, index } of orderedKeys(keys)) {
     const gemini = geminiClientFor(key);
     for (const model of geminiModels()) {
       try {
-        const res = await gemini.chat.completions.create({
-          model,
-          messages: [
-            { role: "system", content: TRANSLATOR_SYSTEM },
-            { role: "user", content: `${targetLine}\n\n${text}` },
-          ],
-          max_tokens: 2000,
-        });
+        const res = await withTimeout(
+          gemini.chat.completions.create({
+            model,
+            messages: [
+              { role: "system", content: TRANSLATOR_SYSTEM },
+              { role: "user", content: `${targetLine}\n\n${text}` },
+            ],
+            max_tokens: 2000,
+          }),
+          9000
+        );
         const out = res.choices[0]?.message?.content?.trim();
-        if (out) return out;
+        if (out) {
+          lastGoodKeyIndex = index;
+          return out;
+        }
       } catch (e) {
         lastErr = e;
+        if (isQuotaError(e)) break; // dead key — jump to the next key at once
       }
     }
   }
@@ -428,27 +466,34 @@ export async function translateImageText(imageDataUri: string): Promise<string> 
   const instruction =
     "Read ALL the text in this image. If the text is in Bangla (Bangla script or Romanized Bangla), output ONLY its English translation. If it is in English, output ONLY its Bangla translation (Bangla script). If the image has no readable text, output exactly: ছবিতে কোনো লেখা পাওয়া যায়নি / No text found in the image. Never explain or add anything else.";
   let lastErr: unknown = null;
-  for (const key of keys) {
+  for (const { key, index } of orderedKeys(keys)) {
     const gemini = geminiClientFor(key);
     for (const model of geminiModels()) {
       try {
-        const res = await gemini.chat.completions.create({
-          model,
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: instruction },
-                { type: "image_url", image_url: { url: imageDataUri } },
-              ],
-            },
-          ] as any,
-          max_tokens: 2000,
-        });
+        const res = await withTimeout(
+          gemini.chat.completions.create({
+            model,
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: instruction },
+                  { type: "image_url", image_url: { url: imageDataUri } },
+                ],
+              },
+            ] as any,
+            max_tokens: 2000,
+          }),
+          15000
+        );
         const out = res.choices[0]?.message?.content?.trim();
-        if (out) return out;
+        if (out) {
+          lastGoodKeyIndex = index;
+          return out;
+        }
       } catch (e) {
         lastErr = e;
+        if (isQuotaError(e)) break; // dead key — jump to the next key at once
       }
     }
   }
