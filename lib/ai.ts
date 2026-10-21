@@ -443,7 +443,7 @@ export async function translateText(
             ],
             max_tokens: 2000,
           }),
-          9000
+          7000
         );
         const out = res.choices[0]?.message?.content?.trim();
         if (out) {
