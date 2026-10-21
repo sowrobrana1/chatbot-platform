@@ -30,7 +30,7 @@ export async function PUT(req: NextRequest) {
   const data = await req.json();
   const allowed = [
     "businessName", "businessNameEn", "phone", "address",
-    "aiProvider", "aiModel", "systemPrompt", "botLanguage", "botTone",
+    "aiProvider", "aiModel", "systemPrompt", "botLanguage", "botTone", "botMode",
     "deliveryInsideDhaka", "deliveryOutsideDhaka", "codEnabled",
     "bkashNumber", "nagadNumber", "rocketNumber",
     "fbPageId", "fbPageToken", "fbVerifyToken", "fbConnected",
