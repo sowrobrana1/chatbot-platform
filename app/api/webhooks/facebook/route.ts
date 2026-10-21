@@ -5,6 +5,8 @@ import {
   generateImageReply,
   generatePaymentCheck,
   extractOrderFromConversation,
+  translateText,
+  translateImageText,
   BotContext,
   CatalogImage,
 } from "@/lib/ai";
@@ -242,6 +244,45 @@ export async function POST(req: NextRequest) {
           text: text || "[কাস্টমার একটি ছবি পাঠিয়েছেন]",
         },
       });
+
+      // --- Translator mode (e.g. BD Translator page): ONLY translate ---
+      if ((settings as any).botMode === "translator") {
+        let tReply: string;
+        if (imageUrl) {
+          try {
+            const imgRes = await fetch(imageUrl);
+            if (!imgRes.ok) throw new Error(`image fetch ${imgRes.status}`);
+            const mime = imgRes.headers.get("content-type") || "image/jpeg";
+            const buf = Buffer.from(await imgRes.arrayBuffer());
+            tReply = await translateImageText(
+              `data:${mime};base64,${buf.toString("base64")}`
+            );
+          } catch (e) {
+            console.error("Translator image handling failed:", e);
+            tReply = "দুঃখিত, ছবিটি পড়া যায়নি / Sorry, the image could not be read";
+          }
+        } else {
+          let target: "en" | "bn" | "auto" = "auto";
+          let bodyText = (text || "").trim();
+          const m = bodyText.match(/^(en|english|bn|bangla|বাংলা)\s*[:：]\s*/i);
+          if (m) {
+            target = /^e/i.test(m[1]) ? "en" : "bn";
+            bodyText = bodyText.slice(m[0].length).trim();
+          }
+          tReply = bodyText
+            ? await translateText(bodyText, target)
+            : "অনুবাদ করতে লেখাটা পাঠান / Send the text to translate";
+        }
+        await prisma.message.create({
+          data: { conversationId: convo.id, role: "bot", text: tReply },
+        });
+        try {
+          await sendFacebookMessage(settings.fbPageToken, senderId, tReply);
+        } catch (e) {
+          console.error("FB send error:", e);
+        }
+        continue;
+      }
 
       // Is there an earlier order from this customer with an unpaid advance?
       const pendingOrder = await prisma.order.findFirst({
